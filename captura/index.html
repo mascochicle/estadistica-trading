@@ -263,7 +263,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v101 · 23 ago 2026";     // se sella al publicar
+var VERSION = "v102 · 23 ago 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -413,8 +413,11 @@ teclas("estrategias", ESTRATEGIAS, "est", "est");
 //  En intradia los tickers preestablecidos (SPY, SPX, QQQ...) no sirven:
 //  el papel lo dice el escaner y cambia cada dia. Se esconden para que el
 //  campo de texto quede al frente y no haya que pasar 12 botones inutiles.
-var MODOS = ["Opciones", "Intradia"];
-sel.modo = localStorage.getItem("modo_captura") || "Opciones";
+//  Intradia va PRIMERO y es el valor por omision: es la operativa que
+//  Marco esta practicando ahora, y la que se anota con prisa. Opciones
+//  queda en segundo lugar porque ahi hay tiempo de elegir.
+var MODOS = ["Intradia", "Opciones"];
+sel.modo = localStorage.getItem("modo_captura") || "Intradia";
 
 function pintarModo(){
   g("modo").innerHTML = MODOS.map(function(v){
