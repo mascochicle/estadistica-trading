@@ -140,6 +140,11 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
 </div>
 
 <div class="paso">
+  <h2>Operativa</h2>
+  <div class="tecla" id="modo"></div>
+</div>
+
+<div class="paso">
   <h2><span class="num">1</span> Qué operaste</h2>
   <div class="tecla" id="tickers"></div>
   <input type="text" id="otroTk" placeholder="otro ticker" maxlength="8"
@@ -239,13 +244,26 @@ WhatsApp, Drive, tu galería&mdash; y de paso te quedan respaldados.</p>
 "use strict";
 
 var TICKERS = ["SPY","SPX","QQQ","NVDA","AAPL","SLV","GLD","META","TSLA","AMZN","PLTR","XOM"];
-var ESTRATEGIAS = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza","Gap B a la alza IMP",
+//  DOS OPERATIVAS, DOS LISTAS.
+//  Antes habia una sola de 24. Al agregar los patrones de intradia serian
+//  36 botones que scrollear a las 9:35, y el intradia se opera con prisa.
+//  El selector de arriba cambia cual se pinta. NO se guarda cual modo era:
+//  el nombre del patron ya distingue ("Micro pullback" es intradia, "0DTE"
+//  es opciones) y el extracto de IBKR ya dice si fue accion u opcion. Asi
+//  el formato del texto no cambia y cruzar_anotaciones.py sigue igual.
+var EST_INTRADIA = ["Bull flag","Flat top","Micro pullback","Retroceso a la media",
+  "ABCD","Dolar entero","Medio dolar","Ruptura maximo premarket",
+  "Rango apertura 1 min","Rojo a verde","Ruptura maximo del dia",
+  "Reversion 5 velas","Otro patron","Sin patron claro"];
+
+var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza","Gap B a la alza IMP",
   "Primer Gap a la alza","Primera vela roja","Ruptura Piso Gap","Ruptura Canal Bajista",
   "Caida Normal","Caida Fuerte","PM40-hora","Piso Fuerte Día","Techo Fuerte",
   "Hanger diario","Hanger Semanal","Modelo de los 4 pasos","3 semanas","Verde Rojo semanal",
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
+var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v96 · 20 ago 2026";     // se sella al publicar
+var VERSION = "v101 · 23 ago 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -390,6 +408,41 @@ function marcar(destino, campo){
 }
 teclas("tickers", TICKERS, "", "tk");
 teclas("estrategias", ESTRATEGIAS, "est", "est");
+
+//  ---- selector de operativa ----
+//  En intradia los tickers preestablecidos (SPY, SPX, QQQ...) no sirven:
+//  el papel lo dice el escaner y cambia cada dia. Se esconden para que el
+//  campo de texto quede al frente y no haya que pasar 12 botones inutiles.
+var MODOS = ["Opciones", "Intradia"];
+sel.modo = localStorage.getItem("modo_captura") || "Opciones";
+
+function pintarModo(){
+  g("modo").innerHTML = MODOS.map(function(v){
+    return '<button class="t" type="button" aria-pressed="' +
+           (v === sel.modo) + '" data-v="' + v + '">' + v + '</button>';
+  }).join("");
+  Array.prototype.forEach.call(g("modo").querySelectorAll(".t"), function(b){
+    b.onclick = function(){
+      if(sel.modo === b.dataset.v) return;      // ya esta, no hacer nada
+      sel.modo = b.dataset.v;
+      localStorage.setItem("modo_captura", sel.modo);
+      sel.est = "";                              // el patron no cruza operativas
+      aplicarModo();
+    };
+  });
+}
+
+function aplicarModo(){
+  var intra = (sel.modo === "Intradia");
+  ESTRATEGIAS = intra ? EST_INTRADIA : EST_OPCIONES;
+  teclas("estrategias", ESTRATEGIAS, "est", "est");
+  g("tickers").style.display = intra ? "none" : "";
+  g("otroTk").placeholder = intra ? "ticker del escaner" : "otro ticker";
+  pintarModo();
+  marcar("estrategias", "est");
+  resumen();
+}
+aplicarModo();
 
 g("otroTk").oninput = function(){
   this.value = this.value.trim().toUpperCase();
