@@ -71,8 +71,6 @@ input[type=text]:focus,input[type=url]:focus{outline:none;border-color:var(--ace
 .guardar{width:100%;padding:15px;border-radius:12px;border:0;background:var(--hundido);
   color:var(--tinta3);font-size:16px;font-weight:680;min-height:56px;margin-top:10px}
 .guardar.listo{background:var(--ok);color:#06180f}
-.cancelarEd{width:100%;margin-top:8px;padding:11px;border-radius:10px;
-  border:1px solid var(--linea2);background:transparent;color:var(--tinta2);font-size:15px}
 .resumen{font-size:13px;color:var(--tinta2);margin:10px 0 0;min-height:19px}
 .resumen b{color:var(--tinta)}
 .aviso{font-size:12.5px;padding:9px 12px;border-radius:9px;margin-top:9px;display:none}
@@ -102,7 +100,6 @@ li .miniatura{margin-top:7px;width:100%;max-width:230px;border-radius:8px;border
   display:block;cursor:zoom-in}
 li .acciones{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
 li .borrar{background:transparent;border:0;color:var(--tinta3);font-size:19px;line-height:1;padding:4px 7px;border-radius:7px}
-li .editar{background:transparent;border:0;color:var(--tinta3);font-size:17px;line-height:1;padding:4px 7px;border-radius:7px}
 li .sacar{background:transparent;border:1px solid var(--linea2);color:var(--tinta2);border-radius:8px;
   padding:5px 9px;font-size:11.5px;min-height:32px;white-space:nowrap}
 li .sacar:hover{border-color:var(--acento);color:var(--acento)}
@@ -185,7 +182,6 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
   <input type="text" id="nota" placeholder="lo que quieras recordar" maxlength="160">
   <p class="resumen" id="resumen"></p>
   <button class="guardar" id="guardar" disabled>Anotar</button>
-  <button class="cancelarEd" id="cancelarEd" type="button" style="display:none">Cancelar el cambio</button>
   <div class="aviso" id="aviso"></div>
 </div>
 
@@ -267,18 +263,11 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v104 · 27 ago 2026";     // se sella al publicar
+var VERSION = "__VER__";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
-//  est es una LISTA: se pueden dar varias estrategias a la vez, sobre
-//  todo en opciones (ej. PM40-hora + Gap a la alza IMP el mismo dia).
-//  Al guardar se unen con " + " EN UN SOLO CAMPO, con espacios simples.
-//  Eso importa: cruzar_anotaciones.py separa los campos del renglon por
-//  DOS O MAS espacios, asi que las estrategias unidas asi le llegan
-//  juntas y el parser no se toca.
-var sel = {tk:"", est:[]};
-var editando = null;   // ts de la anotacion que se esta modificando
+var sel = {tk:"", est:""};
 var fotoPendiente = null;      // Blob ya reducido
 var datos = [];
 
@@ -400,34 +389,25 @@ document.addEventListener("paste", function(e){
 // =====================================================================
 //  INTERFAZ
 // =====================================================================
-function teclas(destino, valores, clase, campo, multi){
+function teclas(destino, valores, clase, campo){
   g(destino).innerHTML = valores.map(function(v){
     return '<button class="t '+clase+'" type="button" aria-pressed="false" data-v="'+v+'">'+v+'</button>';
   }).join("");
   Array.prototype.forEach.call(g(destino).querySelectorAll(".t"), function(b){
     b.onclick = function(){
-      if(multi){
-        var a = sel[campo] || [];
-        var i = a.indexOf(b.dataset.v);
-        if(i >= 0) a.splice(i, 1); else a.push(b.dataset.v);
-        sel[campo] = a;                 // el ORDEN es el de seleccion:
-      }else{                            // la primera es la principal
-        sel[campo] = (sel[campo] === b.dataset.v) ? "" : b.dataset.v;
-        if(campo === "tk") g("otroTk").value = "";
-      }
-      marcar(destino, campo, multi); resumen();
+      sel[campo] = (sel[campo] === b.dataset.v) ? "" : b.dataset.v;
+      if(campo === "tk") g("otroTk").value = "";
+      marcar(destino, campo); resumen();
     };
   });
 }
-function marcar(destino, campo, multi){
+function marcar(destino, campo){
   Array.prototype.forEach.call(g(destino).querySelectorAll(".t"), function(b){
-    var on = multi ? (sel[campo] || []).indexOf(b.dataset.v) >= 0
-                   : b.dataset.v === sel[campo];
-    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("aria-pressed", String(b.dataset.v === sel[campo]));
   });
 }
 teclas("tickers", TICKERS, "", "tk");
-teclas("estrategias", ESTRATEGIAS, "est", "est", true);
+teclas("estrategias", ESTRATEGIAS, "est", "est");
 
 //  ---- selector de operativa ----
 //  En intradia los tickers preestablecidos (SPY, SPX, QQQ...) no sirven:
@@ -449,7 +429,7 @@ function pintarModo(){
       if(sel.modo === b.dataset.v) return;      // ya esta, no hacer nada
       sel.modo = b.dataset.v;
       localStorage.setItem("modo_captura", sel.modo);
-      sel.est = [];                              // el patron no cruza operativas
+      sel.est = "";                              // el patron no cruza operativas
       aplicarModo();
     };
   });
@@ -458,11 +438,11 @@ function pintarModo(){
 function aplicarModo(){
   var intra = (sel.modo === "Intradia");
   ESTRATEGIAS = intra ? EST_INTRADIA : EST_OPCIONES;
-  teclas("estrategias", ESTRATEGIAS, "est", "est", true);
+  teclas("estrategias", ESTRATEGIAS, "est", "est");
   g("tickers").style.display = intra ? "none" : "";
   g("otroTk").placeholder = intra ? "ticker del escaner" : "otro ticker";
   pintarModo();
-  marcar("estrategias", "est", true);
+  marcar("estrategias", "est");
   resumen();
 }
 aplicarModo();
@@ -472,20 +452,15 @@ g("otroTk").oninput = function(){
   sel.tk = this.value;
   marcar("tickers", "tk"); resumen();
 };
-function estTexto(){ return (sel.est || []).join(" + "); }
-
 function resumen(){
-  var listo = sel.tk && sel.est.length;
-  var verbo = editando ? "Vas a cambiar" : "Vas a anotar";
-  g("resumen").innerHTML = listo ? verbo + " <b>"+sel.tk+"</b> con <b>"+estTexto()+"</b>"
+  var listo = sel.tk && sel.est;
+  g("resumen").innerHTML = listo ? "Vas a anotar <b>"+sel.tk+"</b> con <b>"+sel.est+"</b>"
                                  + (fotoPendiente ? " y su gráfico." : ".")
                          : !sel.tk ? "Elige el ticker." : "Elige la estrategia.";
   var b = g("guardar");
   b.disabled = !listo;
   b.className = listo ? "guardar listo" : "guardar";
-  b.textContent = editando ? (listo ? "Guardar cambios" : "Guardar cambios")
-                           : (listo ? "Anotar " + sel.tk : "Anotar");
-  g("cancelarEd").style.display = editando ? "" : "none";
+  b.textContent = listo ? "Anotar " + sel.tk : "Anotar";
 }
 function avisar(txt, bien){
   var a = g("aviso");
@@ -516,51 +491,14 @@ function pintar(){
       + (r.nota ? '<span class="nt">'+esc(r.nota)+'</span>' : '')
       + (src ? '<img class="miniatura" src="'+src+'" alt="Gráfico" data-ver="'+src+'">' : '')
       + '</span><span class="acciones">'
-      + '<button class="editar" type="button" data-ed="'+r.ts+'" title="Modificar">✎</button>'
       + '<button class="borrar" type="button" data-ts="'+r.ts+'" title="Borrar">×</button>'
       + (r.img ? '<button class="sacar" type="button" data-sacar="'+r.ts+'">Sacar</button>' : '')
       + '</span></li>';
   }).join("");
-  //  MODIFICAR: carga la anotacion en el formulario de arriba. Sirve
-  //  para corregir un dato o para AGREGARLE EL GRAFICO DESPUES, que es
-  //  para lo que mas falta hacia -- muchas veces la captura se tiene un
-  //  rato despues de anotar la entrada.
-  Array.prototype.forEach.call(g("lista").querySelectorAll(".editar"), function(b){
-    b.onclick = function(){
-      var r = datos.filter(function(z){ return z.ts === +b.dataset.ed; })[0];
-      if(!r) return;
-      editando = r.ts;
-      sel.tk = r.tk;
-      sel.est = String(r.est || "").split(" + ").filter(function(x){ return x; });
-      //  Si la estrategia guardada es de la otra operativa, se cambia de
-      //  modo solo; si no, sus botones no existirian en pantalla.
-      var esOpc = EST_OPCIONES.indexOf(sel.est[0]) >= 0;
-      var modoR = esOpc ? "Opciones" : "Intradia";
-      if(modoR !== sel.modo){
-        sel.modo = modoR;
-        localStorage.setItem("modo_captura", sel.modo);
-        aplicarModo();
-      }
-      g("otroTk").value = r.tk;
-      g("nota").value = r.nota || "";
-      if(r.img){
-        fotoPendiente = r.img;
-        g("previaImg").src = URL.createObjectURL(r.img);
-        g("previa").className = "previa on";
-        g("pistaFoto").textContent = "Gráfico actual · " + kb(r.img.size);
-      }else{
-        g("quitarFoto").onclick();
-      }
-      marcar("tickers","tk"); marcar("estrategias","est", true);
-      resumen();
-      g("guardar").scrollIntoView({behavior:"smooth", block:"center"});
-    };
-  });
   Array.prototype.forEach.call(g("lista").querySelectorAll(".borrar"), function(b){
     b.onclick = async function(){
       await quitar(+b.dataset.ts);
       datos = datos.filter(function(r){ return r.ts !== +b.dataset.ts; });
-      if(editando === +b.dataset.ts) limpiarForm();
       pintar();
     };
   });
@@ -581,42 +519,22 @@ function pintar(){
 }
 g("cerrarLupa").onclick = function(){ g("lupa").close(); };
 
-//  EL ts NO SE TOCA AL EDITAR, y es lo mas importante de este bloque.
-//  cruzar_anotaciones.py empareja cada anotacion con la APERTURA del
-//  contrato por fecha y hora. Si al corregir un dato se le pusiera la
-//  hora de la correccion, la anotacion dejaria de emparejar y el cruce
-//  devolveria "0 estrategias puestas" -- que se lee igual que "no habia
-//  anotaciones". Un fallo mudo. Por eso al editar se conserva el ts
-//  original y solo se reemplaza el contenido.
-function limpiarForm(){
-  editando = null;
-  sel.tk = ""; sel.est = [];
-  g("otroTk").value = ""; g("nota").value = "";
-  g("quitarFoto").onclick();
-  marcar("tickers","tk"); marcar("estrategias","est", true);
-  resumen();
-}
-
-g("cancelarEd").onclick = function(){ limpiarForm(); };
-
 g("guardar").onclick = async function(){
-  if(!sel.tk || !sel.est.length) return;
-  var r = {ts: editando || Date.now(), tk: sel.tk, est: estTexto(),
-           nota: g("nota").value.trim()};
+  if(!sel.tk || !sel.est) return;
+  var r = {ts: Date.now(), tk: sel.tk, est: sel.est, nota: g("nota").value.trim()};
   if(fotoPendiente) r.img = fotoPendiente;
-  var eraEdicion = !!editando;
   try{
-    await poner(r);                     // put() reemplaza si el ts ya existe
+    await poner(r);
   }catch(e){
     avisar("No se pudo guardar: " + (e.message || e), false);
     return;
   }
-  datos = datos.filter(function(z){ return z.ts !== r.ts; });
   datos.push(r);
-  avisar((eraEdicion ? "Cambiado: " : "Anotado: ") + r.tk + " · " + r.est
-         + (r.img ? " con gráfico" : ""), true);
-  limpiarForm();
-  pintar();
+  avisar("Anotado: " + r.tk + " · " + r.est + (r.img ? " con gráfico" : ""), true);
+  sel.tk = ""; sel.est = ""; g("otroTk").value = ""; g("nota").value = "";
+  g("quitarFoto").onclick();
+  marcar("tickers","tk"); marcar("estrategias","est");
+  resumen(); pintar();
 };
 
 // =====================================================================
