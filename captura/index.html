@@ -72,6 +72,9 @@ input[type=text]:focus,input[type=url]:focus,input[type=datetime-local]:focus{ou
 .guardar{width:100%;padding:15px;border-radius:12px;border:0;background:var(--hundido);
   color:var(--tinta3);font-size:16px;font-weight:680;min-height:56px;margin-top:10px}
 .guardar.listo{background:var(--ok);color:#06180f}
+.editBanner{margin:0 0 12px;padding:11px 13px;border-radius:10px;border:1px solid var(--acento);
+  background:rgba(96,165,250,.10);color:var(--tinta);font-size:13.5px;line-height:1.45}
+.editBanner b{color:var(--acento)}
 .cancelarEd{width:100%;margin-top:8px;padding:11px;border-radius:10px;
   border:1px solid var(--linea2);background:transparent;color:var(--tinta2);font-size:15px}
 .resumen{font-size:13px;color:var(--tinta2);margin:10px 0 0;min-height:19px}
@@ -104,6 +107,8 @@ li .miniatura{margin-top:7px;width:100%;max-width:230px;border-radius:8px;border
 li .acciones{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
 li .borrar{background:transparent;border:0;color:var(--tinta3);font-size:19px;line-height:1;padding:4px 7px;border-radius:7px}
 li .editar{background:transparent;border:0;color:var(--tinta3);font-size:17px;line-height:1;padding:4px 7px;border-radius:7px}
+li .foto1{background:transparent;border:0;color:var(--tinta3);font-size:16px;line-height:1;padding:4px 7px;border-radius:7px}
+li .foto1:hover{color:var(--acento)}
 li .sacar{background:transparent;border:1px solid var(--linea2);color:var(--tinta2);border-radius:8px;
   padding:5px 9px;font-size:11.5px;min-height:32px;white-space:nowrap}
 li .sacar:hover{border-color:var(--acento);color:var(--acento)}
@@ -148,6 +153,12 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
   <div class="tecla" id="modo"></div>
 </div>
 
+<!--  AVISO DE QUE SE ESTA MODIFICANDO. Sin el, al darle a ✎ el formulario
+      se llena y parece que estas anotando una entrada nueva -- el mismo sitio,
+      los mismos campos, y se reporto como confuso. Ahora dice cual estas
+      tocando, y sale arriba que es donde caes. -->
+<div class="editBanner" id="editBanner" style="display:none"></div>
+
 <div class="paso">
   <h2><span class="num">1</span> Qué operaste</h2>
   <div class="tecla" id="tickers"></div>
@@ -180,6 +191,10 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
         abre el explorador completo. Que sea imagen se valida al procesarla. -->
   <input type="file" id="fArch" hidden>
 </div>
+
+<!--  GRAFICO DESDE EL RENGLON. Sin accept, por lo mismo que fArch: en
+      Android accept="image/*" esconde Drive y el explorador. -->
+<input type="file" id="fLista" hidden>
 
 <div class="paso">
   <h2><span class="num">4</span> Nota <span class="opt">— opcional</span></h2>
@@ -278,7 +293,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v106 · 3 sep 2026";     // se sella al publicar
+var VERSION = "v107 · 3 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -392,6 +407,25 @@ g("btnArch").onclick = function(){ g("fArch").click(); };
 ["fCam","fGal","fArch"].forEach(function(id){
   g(id).onchange = function(){ tomarFoto(this.files[0]); this.value = ""; };
 });
+//  A que anotacion le estamos poniendo grafico desde la lista.
+var fotoPara = null;
+g("fLista").onchange = async function(){
+  var archivo = this.files[0]; this.value = "";
+  if(!archivo || !fotoPara) return;
+  var r = datos.filter(function(z){ return z.ts === fotoPara; })[0];
+  if(!r){ fotoPara = null; return; }
+  try{
+    var b = await reducir(archivo);
+    r.img = b;
+    await poner(r);                    // mismo ts: put() lo reemplaza
+    avisar("Gráfico puesto en " + r.tk + " · " + kb(b.size), true);
+    pintar();
+  }catch(e){
+    avisar("No se pudo usar esa imagen: " + (e.message || e), false);
+  }
+  fotoPara = null;
+};
+
 g("quitarFoto").onclick = function(){
   fotoPendiente = null;
   g("previa").className = "previa";
@@ -497,6 +531,18 @@ function resumen(){
   b.textContent = editando ? (listo ? "Guardar cambios" : "Guardar cambios")
                            : (listo ? "Anotar " + sel.tk : "Anotar");
   g("cancelarEd").style.display = editando ? "" : "none";
+  var eb = g("editBanner");
+  if(editando){
+    var re = datos.filter(function(z){ return z.ts === editando; })[0];
+    var de = re ? new Date(re.ts) : null;
+    eb.innerHTML = "<b>Estás modificando</b> la anotación de "
+      + (de ? de.getDate()+" "+M[de.getMonth()]+", "+reloj(de) : "")
+      + (re ? " · "+esc(re.tk) : "")
+      + ". No es una nueva.";
+    eb.style.display = "";
+  }else{
+    eb.style.display = "none";
+  }
 }
 function avisar(txt, bien){
   var a = g("aviso");
@@ -527,11 +573,26 @@ function pintar(){
       + (r.nota ? '<span class="nt">'+esc(r.nota)+'</span>' : '')
       + (src ? '<img class="miniatura" src="'+src+'" alt="Gráfico" data-ver="'+src+'">' : '')
       + '</span><span class="acciones">'
+      + '<button class="foto1" type="button" data-foto="'+r.ts+'" title="'
+      + (r.img ? 'Cambiar el gráfico' : 'Agregar el gráfico') + '">📷</button>'
       + '<button class="editar" type="button" data-ed="'+r.ts+'" title="Modificar">✎</button>'
       + '<button class="borrar" type="button" data-ts="'+r.ts+'" title="Borrar">×</button>'
       + (r.img ? '<button class="sacar" type="button" data-sacar="'+r.ts+'">Sacar</button>' : '')
       + '</span></li>';
   }).join("");
+  //  EL GRAFICO SE PONE DESDE AQUI, SIN SUBIR AL FORMULARIO.
+  //  Antes habia que darle a ✎, lo cual mandaba arriba, al mismo sitio
+  //  donde se anota una entrada nueva -- y eso confunde: no queda claro
+  //  si estas modificando la de abajo o empezando otra -- se reporto
+  //  como confuso. Agregar el grafico despues es EL uso mas
+  //  comun de editar, asi que se resuelve de un toque en el renglon.
+  Array.prototype.forEach.call(g("lista").querySelectorAll(".foto1"), function(b){
+    b.onclick = function(){
+      fotoPara = +b.dataset.foto;
+      g("fLista").click();
+    };
+  });
+
   //  MODIFICAR: carga la anotacion en el formulario de arriba. Sirve
   //  para corregir un dato o para AGREGARLE EL GRAFICO DESPUES, que es
   //  para lo que mas falta hacia -- muchas veces la captura se tiene un
