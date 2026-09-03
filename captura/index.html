@@ -53,9 +53,10 @@ button{font:inherit;cursor:pointer}
 .t.est{font-size:12.5px;font-weight:520;padding:9px 11px;min-height:42px}
 .t[aria-pressed="true"]{background:var(--acento);border-color:var(--acento);color:var(--fondo)}
 .t:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
-input[type=text],input[type=url]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--linea2);
+input[type=text],input[type=url],input[type=datetime-local]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--linea2);
   background:var(--hundido);color:var(--tinta);font:inherit;font-size:14.5px;min-height:46px;margin-top:8px}
-input[type=text]:focus,input[type=url]:focus{outline:none;border-color:var(--acento)}
+input[type=text]:focus,input[type=url]:focus,input[type=datetime-local]:focus{outline:none;border-color:var(--acento)}
+.fh{display:block;margin:14px 0 6px;font-size:14px;color:var(--tenue)}
 
 .foto{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .foto button{flex:1;min-width:130px;padding:12px;border-radius:10px;border:1px dashed var(--linea2);
@@ -183,6 +184,16 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
 <div class="paso">
   <h2><span class="num">4</span> Nota <span class="opt">— opcional</span></h2>
   <input type="text" id="nota" placeholder="lo que quieras recordar" maxlength="160">
+
+  <!-- FECHA Y HORA. Vacio = ahora mismo, que es el caso normal. Se llena
+       solo al capturar una entrada atrasada, o al corregir la
+       hora de una que ya existe.
+       OJO: es hora de CDMX, la del telefono, igual que cuando se anota en
+       vivo. cruzar_anotaciones.py hace la conversion a Nueva York; si aqui
+       se metiera hora de NY, el cruce fallaria en silencio. -->
+  <label class="fh" for="cuando">Fecha y hora <span class="opt">— vacío = ahora</span></label>
+  <input type="datetime-local" id="cuando">
+
   <p class="resumen" id="resumen"></p>
   <button class="guardar" id="guardar" disabled>Anotar</button>
   <button class="cancelarEd" id="cancelarEd" type="button" style="display:none">Cancelar el cambio</button>
@@ -267,7 +278,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v104 · 27 ago 2026";     // se sella al publicar
+var VERSION = "v105 · 3 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -434,7 +445,7 @@ teclas("estrategias", ESTRATEGIAS, "est", "est", true);
 //  el papel lo dice el escaner y cambia cada dia. Se esconden para que el
 //  campo de texto quede al frente y no haya que pasar 12 botones inutiles.
 //  Intradia va PRIMERO y es el valor por omision: es la operativa que
-//  Marco esta practicando ahora, y la que se anota con prisa. Opciones
+//  que se esta practicando ahora, y la que se anota con prisa. Opciones
 //  queda en segundo lugar porque ahi hay tiempo de elegir.
 var MODOS = ["Intradia", "Opciones"];
 sel.modo = localStorage.getItem("modo_captura") || "Intradia";
@@ -530,6 +541,11 @@ function pintar(){
       var r = datos.filter(function(z){ return z.ts === +b.dataset.ed; })[0];
       if(!r) return;
       editando = r.ts;
+      //  Se rellena con la hora ORIGINAL. Si no se toca, el ts no cambia
+      //  (que es la regla de siempre); si se cambia a proposito, entonces
+      //  si se mueve. Asi corregir un dato nunca mueve la hora sin querer,
+      //  pero corregir la hora tambien se puede.
+      g("cuando").value = paraInput(r.ts);
       sel.tk = r.tk;
       sel.est = String(r.est || "").split(" + ").filter(function(x){ return x; });
       //  Si la estrategia guardada es de la otra operativa, se cambia de
@@ -591,7 +607,7 @@ g("cerrarLupa").onclick = function(){ g("lupa").close(); };
 function limpiarForm(){
   editando = null;
   sel.tk = ""; sel.est = [];
-  g("otroTk").value = ""; g("nota").value = "";
+  g("otroTk").value = ""; g("nota").value = ""; g("cuando").value = "";
   g("quitarFoto").onclick();
   marcar("tickers","tk"); marcar("estrategias","est", true);
   resumen();
@@ -601,17 +617,36 @@ g("cancelarEd").onclick = function(){ limpiarForm(); };
 
 g("guardar").onclick = async function(){
   if(!sel.tk || !sel.est.length) return;
-  var r = {ts: editando || Date.now(), tk: sel.tk, est: estTexto(),
-           nota: g("nota").value.trim()};
+
+  //  LA FECHA MANDA SI ESTA ESCRITA. Vacia = ahora, que es lo de siempre.
+  //  Sirve para dos cosas: capturar una entrada atrasada que se olvido, y
+  //  corregir la hora de una que quedo mal.
+  //
+  //  ESTO MATIZA LA REGLA DE ABAJO ("el ts no se toca al editar"). Esa
+  //  regla existe para que corregir un DATO no mueva la hora sin querer;
+  //  por eso al editar el campo se rellena con la hora original y, si no
+  //  se toca, el ts queda igual. Cambiarlo a proposito si vale.
+  var escrita = g("cuando").value;
+  var ts = escrita ? new Date(escrita).getTime() : (editando || Date.now());
+  if(escrita && isNaN(ts)){
+    avisar("La fecha no se entiende. Revisala.", false);
+    return;
+  }
+  var r = {ts: ts, tk: sel.tk, est: estTexto(), nota: g("nota").value.trim()};
   if(fotoPendiente) r.img = fotoPendiente;
   var eraEdicion = !!editando;
+  var tsViejo = editando;
   try{
+    //  Si al editar se movio la hora, el ts cambia -- y el ts es la llave
+    //  del almacen. Sin borrar el viejo quedarian DOS anotaciones de la
+    //  misma entrada y el cruce contaria doble.
+    if(eraEdicion && tsViejo !== ts) await quitar(tsViejo);
     await poner(r);                     // put() reemplaza si el ts ya existe
   }catch(e){
     avisar("No se pudo guardar: " + (e.message || e), false);
     return;
   }
-  datos = datos.filter(function(z){ return z.ts !== r.ts; });
+  datos = datos.filter(function(z){ return z.ts !== r.ts && z.ts !== tsViejo; });
   datos.push(r);
   avisar((eraEdicion ? "Cambiado: " : "Anotado: ") + r.tk + " · " + r.est
          + (r.img ? " con gráfico" : ""), true);
@@ -662,6 +697,14 @@ async function sacar(filas){
 }
 
 // ------------------------------------------------------------- exportar
+//  Convierte un ts a lo que espera <input type=datetime-local>, que es
+//  hora LOCAL sin zona: "2026-09-01T10:30". No sirve toISOString(), que
+//  devuelve UTC y correria la hora seis horas.
+function paraInput(ts){
+  var d = new Date(ts), p = function(n){ return (n<10?"0":"")+n; };
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())
+       + "T"+p(d.getHours())+":"+p(d.getMinutes());
+}
 function iso(ts){
   var d = new Date(ts), p = function(n){ return (n<10?"0":"")+n; };
   return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+" "+p(d.getHours())+":"+p(d.getMinutes());
@@ -723,7 +766,7 @@ g("masOpc").onclick = function(){
 //  el 20-ago-2026 creando un archivo en Drive y bajo a la computadora en
 //  menos de 20 segundos. Por eso esto sirve: lo que se suelte en la carpeta
 //  de Drive aparece solo en la carpeta del proyecto, y el .bat lo levanta
-//  sin que Marco toque la computadora.
+//  sin tocar la computadora.
 //
 //  Se comparte un ARCHIVO y no texto suelto. Compartir texto deja que cada
 //  app decida que hacer con el -- Drive a veces lo vuelve documento, a veces
@@ -741,7 +784,7 @@ function nombreArchivo(){
 }
 // ------------------------------------------------------- envio automatico
 //  La hoja de compartir SIEMPRE pregunta en que carpeta guardar, y eso era lo
-//  que a Marco le quitaba el tiempo. Este camino la brinca: la app le manda
+//  que quitaba el tiempo. Este camino la brinca: la app manda
 //  el texto a un Google Apps Script suyo, y ese script lo escribe directo en
 //  la carpeta del proyecto en Drive.
 //

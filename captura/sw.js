@@ -1,4 +1,4 @@
-const CACHE = "captura-v104";
+const CACHE = "captura-v105";
 const ARCHIVOS = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
