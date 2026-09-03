@@ -128,6 +128,10 @@ li .miniatura{margin-top:7px;width:100%;max-width:230px;border-radius:8px;border
 li .acciones{display:none}
 li{cursor:pointer}
 li .flecha{color:var(--tinta3);font-size:19px;padding-left:6px;align-self:center}
+li .faltaMax{display:inline-block;margin-top:5px;font-size:11px;padding:2px 7px;border-radius:6px;
+  background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);color:#f59e0b}
+li .conMax{display:inline-block;margin-top:5px;font-size:11px;padding:2px 7px;border-radius:6px;
+  background:rgba(96,165,250,.12);border:1px solid var(--linea2);color:var(--tinta2)}
 li .borrar{background:transparent;border:0;color:var(--tinta3);font-size:19px;line-height:1;padding:4px 7px;border-radius:7px}
 li .editar{background:transparent;border:0;color:var(--tinta3);font-size:17px;line-height:1;padding:4px 7px;border-radius:7px}
 li .foto1{background:transparent;border:0;color:var(--tinta3);font-size:16px;line-height:1;padding:4px 7px;border-radius:7px}
@@ -224,6 +228,7 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
 <div class="hoja" id="hoja">
   <h3 id="hojaTit"></h3>
   <button type="button" id="hFoto"></button>
+  <button type="button" id="hMax"></button>
   <button type="button" id="hEdit">✎  Modificar ticker, estrategia, nota u hora</button>
   <button type="button" id="hSacar">⬇  Sacar el gráfico al teléfono</button>
   <button type="button" id="hBorrar" class="rojo">🗑  Borrar esta anotación</button>
@@ -340,7 +345,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v109 · 3 sep 2026";     // se sella al publicar
+var VERSION = "v110 · 3 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -470,6 +475,9 @@ function abrirHoja(ts){
   g("hojaTit").innerHTML = "<b>" + esc(r.tk) + "</b> · " + esc(r.est)
     + "<br>" + d.getDate() + " " + M[d.getMonth()] + ", " + reloj(d);
   g("hFoto").textContent = r.img ? "📷  Cambiar el gráfico" : "📷  Poner el gráfico";
+  g("hMax").textContent = r.max
+      ? "📈  Máximo: " + (r.max === "nunca" ? "nunca subió" : r.max) + "  ·  cambiar"
+      : "📈  Poner el máximo que alcanzó";
   g("hSacar").style.display = r.img ? "" : "none";
   g("velo").className = "velo on";
   g("hoja").className = "hoja on";
@@ -488,6 +496,49 @@ function reenviar(clase, attr){
 }
 g("velo").onclick    = cerrarHoja;
 g("hCerrar").onclick = cerrarHoja;
+//  EL MAXIMO SE PONE DESDE AQUI, DESPUES DE QUE LA OPERACION CORRIO.
+//  No esta en el formulario de captura a proposito: al entrar nunca se
+//  sabe cuanto va a llegar a valer. Se sabe al cerrar, y para eso hay
+//  que volver a la anotacion -- que es justo lo que la hoja facilita.
+//
+//  POR QUE HACE FALTA ESTE DATO. Los extractos de IBKR traen solo el
+//  precio de CIERRE, nunca el maximo que alcanzo la opcion. Sin el no se
+//  puede medir que habria dejado cada regla de salida ("?y si vendo en
+//  1.7x en vez de 2x?"), porque no se sabe si llego a 1.7x.
+//
+//  "NUNCA" NO ES LO MISMO QUE VACIO, y es la parte que importa:
+//     vacio  = todavia no se anota  (falta)
+//     nunca  = la opcion jamas paso del precio de entrada
+//  El segundo caso es un dato valiosisimo: dice que ahi NO habia
+//  oportunidad que perder, y ninguna regla de salida la habria salvado.
+//  Si esos casos no se registran, el analisis solo ve las que subieron y
+//  saca una conclusion optimista.
+g("hMax").onclick = async function(){
+  if(hojaTs === null) return;
+  var r = datos.filter(function(z){ return z.ts === hojaTs; })[0];
+  if(!r) return;
+  var actual = r.max || "";
+  var t = prompt("¿Hasta cuánto llegó a valer la opción?" + String.fromCharCode(10)
+               + "Escribe el precio (por ejemplo 2.35)." + String.fromCharCode(10)
+               + "Si nunca pasó de tu entrada, escribe: nunca", actual);
+  if(t === null) return;                       // cancelo
+  t = t.trim().toLowerCase().replace(",", ".");
+  var val;
+  if(t === ""){ val = null; }                  // lo borro
+  else if(t === "nunca"){ val = "nunca"; }
+  else if(!isNaN(parseFloat(t)) && parseFloat(t) > 0){ val = String(parseFloat(t)); }
+  else { avisar("No entendí ese número. Escribe algo como 2.35, o la palabra nunca.", false); return; }
+  if(val === null) delete r.max; else r.max = val;
+  try{
+    await poner(r);
+    avisar(val === null ? "Máximo borrado."
+         : "Máximo de " + r.tk + ": " + (val === "nunca" ? "nunca subió" : val), true);
+    cerrarHoja();
+    pintar();
+  }catch(e){
+    avisar("No se pudo guardar: " + (e.message || e), false);
+  }
+};
 g("hFoto").onclick   = function(){ reenviar("foto1",  "data-foto");  };
 g("hEdit").onclick   = function(){ reenviar("editar", "data-ed");    };
 g("hSacar").onclick  = function(){ reenviar("sacar",  "data-sacar"); };
@@ -568,7 +619,11 @@ teclas("estrategias", ESTRATEGIAS, "est", "est", true);
 //  que se esta practicando ahora, y la que se anota con prisa. Opciones
 //  queda en segundo lugar porque ahi hay tiempo de elegir.
 var MODOS = ["Intradia", "Opciones"];
-sel.modo = localStorage.getItem("modo_captura") || "Intradia";
+//  POR OMISION, OPCIONES (3-sep-2026). Antes arrancaba en Intradia,
+//  que era lo que se practicaba entonces; ese enfoque se dejo.
+//  Nota: localStorage manda sobre esto, asi que en un telefono que ya
+//  eligio Intradia alguna vez seguira en Intradia hasta que se cambie.
+sel.modo = localStorage.getItem("modo_captura") || "Opciones";
 
 function pintarModo(){
   g("modo").innerHTML = MODOS.map(function(v){
@@ -638,6 +693,13 @@ function avisar(txt, bien){
   avisar.t = setTimeout(function(){ a.className = "aviso"; }, 3200);
 }
 
+//  Si la estrategia de la anotacion es de opciones. Se mira la PRIMERA
+//  de la lista: cuando hay varias unidas con " + ", todas son del mismo
+//  bloque porque el selector de operativa no deja mezclar.
+function esDeOpciones(est){
+  var primera = String(est || "").split(" + ")[0].trim();
+  return EST_OPCIONES.indexOf(primera) >= 0;
+}
 var M = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
 function reloj(d){
   var h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? "am" : "pm", h12 = h % 12 || 12;
@@ -657,6 +719,13 @@ function pintar(){
     return '<li><span class="cuando">'+d.getDate()+' '+M[d.getMonth()]+'<br>'+reloj(d)+'</span>'
       + '<span class="qq"><span class="tk">'+esc(r.tk)+'</span> <span class="es">'+esc(r.est)+'</span>'
       + (r.nota ? '<span class="nt">'+esc(r.nota)+'</span>' : '')
+      //  RECORDATORIO DE QUE FALTA EL MAXIMO. Se pidio asi -- "se puede
+      //  olvidar anotar eso". Solo en anotaciones de OPCIONES
+      //  -- en intradia ese dato no aplica y seria ruido.
+      + (esDeOpciones(r.est) && !r.max
+           ? '<span class="faltaMax">falta el máximo</span>'
+           : (r.max ? '<span class="conMax">máx '
+                    + (r.max === "nunca" ? "nunca subió" : esc(r.max)) + '</span>' : ''))
       + (src ? '<img class="miniatura" src="'+src+'" alt="Gráfico" data-ver="'+src+'">' : '')
       + '</span><span class="acciones">'
       + '<button class="foto1" type="button" data-foto="'+r.ts+'" title="'
@@ -890,7 +959,14 @@ function iso(ts){
 function textoDeTodas(){
   return datos.slice().sort(function(a,b){ return a.ts - b.ts; })
     .map(function(r){
+      //  El maximo va en SU PROPIO CAMPO, separado por dos espacios.
+      //  cruzar_anotaciones.py toma partes[0] como ticker, partes[1] como
+      //  estrategia y de ahi en adelante solo mira el que empieza con
+      //  raya (la nota): cualquier otro campo lo IGNORA. Asi esto entra
+      //  sin romper el cruce de hoy, y cuando se quiera leer basta con
+      //  buscar el que empieza con "max ".
       return iso(r.ts)+"  "+r.tk+"  "+r.est
+           + (r.max ? "  max "+r.max : "")
            + (r.nota ? "  — "+r.nota : "")
            + (r.img ? "  [gráfico]" : "");
     }).join("\n");
