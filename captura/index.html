@@ -72,6 +72,21 @@ input[type=text]:focus,input[type=url]:focus,input[type=datetime-local]:focus{ou
 .guardar{width:100%;padding:15px;border-radius:12px;border:0;background:var(--hundido);
   color:var(--tinta3);font-size:16px;font-weight:680;min-height:56px;margin-top:10px}
 .guardar.listo{background:var(--ok);color:#06180f}
+/*  HOJA DE OPCIONES. Sale de abajo, que es donde alcanza el pulgar, y
+    cada boton mide 54px de alto y todo el ancho: imposible fallarle. */
+.velo{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:40}
+.velo.on{display:block}
+.hoja{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--fondo2);
+  border-top:1px solid var(--linea2);border-radius:16px 16px 0 0;padding:14px 14px calc(14px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform .18s ease;max-width:640px;margin:0 auto}
+.hoja.on{transform:translateY(0)}
+.hoja h3{margin:2px 0 12px;font-size:14px;color:var(--tinta2);font-weight:600;line-height:1.4}
+.hoja h3 b{color:var(--tinta)}
+.hoja button{width:100%;min-height:54px;margin-bottom:8px;border-radius:12px;font-size:15.5px;
+  border:1px solid var(--linea2);background:var(--fondo);color:var(--tinta);text-align:left;padding:0 16px}
+.hoja button:active{border-color:var(--acento)}
+.hoja .rojo{color:#f87171}
+.hoja .cerrar{background:transparent;border:0;color:var(--tinta3);text-align:center;margin-bottom:0}
 .editBanner{margin:0 0 12px;padding:11px 13px;border-radius:10px;border:1px solid var(--acento);
   background:rgba(96,165,250,.10);color:var(--tinta);font-size:13.5px;line-height:1.45}
 .editBanner b{color:var(--acento)}
@@ -104,7 +119,15 @@ li .es{font-size:12.5px;color:var(--acento);font-weight:560}
 li .nt{font-size:12.5px;color:var(--tinta2);margin-top:2px;word-break:break-word}
 li .miniatura{margin-top:7px;width:100%;max-width:230px;border-radius:8px;border:1px solid var(--linea2);
   display:block;cursor:zoom-in}
-li .acciones{display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+/*  LOS ICONITOS SE ESCONDEN. Se reporto que el dedo no les atina, y
+    tenian razon: 17px de icono con 7px de aire alrededor esta muy por
+    debajo de los 48px que recomienda cualquier guia tactil.
+    Siguen en el DOM a proposito -- la hoja de opciones les reenvia el
+    clic, asi que toda la logica de editar, borrar y sacar se quedo tal
+    cual y no hubo que reescribirla. */
+li .acciones{display:none}
+li{cursor:pointer}
+li .flecha{color:var(--tinta3);font-size:19px;padding-left:6px;align-self:center}
 li .borrar{background:transparent;border:0;color:var(--tinta3);font-size:19px;line-height:1;padding:4px 7px;border-radius:7px}
 li .editar{background:transparent;border:0;color:var(--tinta3);font-size:17px;line-height:1;padding:4px 7px;border-radius:7px}
 li .foto1{background:transparent;border:0;color:var(--tinta3);font-size:16px;line-height:1;padding:4px 7px;border-radius:7px}
@@ -190,6 +213,16 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
         de fotos y esconde Drive, OneDrive y la memoria del telefono. Sin el,
         abre el explorador completo. Que sea imagen se valida al procesarla. -->
   <input type="file" id="fArch" hidden>
+</div>
+
+<div class="velo" id="velo"></div>
+<div class="hoja" id="hoja">
+  <h3 id="hojaTit"></h3>
+  <button type="button" id="hFoto"></button>
+  <button type="button" id="hEdit">✎  Modificar ticker, estrategia, nota u hora</button>
+  <button type="button" id="hSacar">⬇  Sacar el gráfico al teléfono</button>
+  <button type="button" id="hBorrar" class="rojo">🗑  Borrar esta anotación</button>
+  <button type="button" id="hCerrar" class="cerrar">Cerrar</button>
 </div>
 
 <!--  GRAFICO DESDE EL RENGLON. Sin accept, por lo mismo que fArch: en
@@ -293,7 +326,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v107 · 3 sep 2026";     // se sella al publicar
+var VERSION = "v108 · 3 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -407,6 +440,45 @@ g("btnArch").onclick = function(){ g("fArch").click(); };
 ["fCam","fGal","fArch"].forEach(function(id){
   g(id).onchange = function(){ tomarFoto(this.files[0]); this.value = ""; };
 });
+// =====================================================================
+//  HOJA DE OPCIONES DEL RENGLON
+//  No reimplementa nada: cada boton grande le reenvia el clic al boton
+//  chico que ya estaba en el renglon (y que ahora va escondido). Asi
+//  editar, borrar y sacar siguen siendo el mismo codigo probado, y lo
+//  unico nuevo es la forma de llegar a ellos.
+// =====================================================================
+var hojaTs = null;
+function abrirHoja(ts){
+  var r = datos.filter(function(z){ return z.ts === ts; })[0];
+  if(!r) return;
+  hojaTs = ts;
+  var d = new Date(ts);
+  g("hojaTit").innerHTML = "<b>" + esc(r.tk) + "</b> · " + esc(r.est)
+    + "<br>" + d.getDate() + " " + M[d.getMonth()] + ", " + reloj(d);
+  g("hFoto").textContent = r.img ? "📷  Cambiar el gráfico" : "📷  Poner el gráfico";
+  g("hSacar").style.display = r.img ? "" : "none";
+  g("velo").className = "velo on";
+  g("hoja").className = "hoja on";
+}
+function cerrarHoja(){
+  g("velo").className = "velo";
+  g("hoja").className = "hoja";
+  hojaTs = null;
+}
+//  Reenvia al boton chico del renglon, el que ya tiene su handler puesto.
+function reenviar(clase, attr){
+  if(hojaTs === null) return;
+  var b = g("lista").querySelector('.' + clase + '[' + attr + '="' + hojaTs + '"]');
+  cerrarHoja();
+  if(b) b.click();
+}
+g("velo").onclick    = cerrarHoja;
+g("hCerrar").onclick = cerrarHoja;
+g("hFoto").onclick   = function(){ reenviar("foto1",  "data-foto");  };
+g("hEdit").onclick   = function(){ reenviar("editar", "data-ed");    };
+g("hSacar").onclick  = function(){ reenviar("sacar",  "data-sacar"); };
+g("hBorrar").onclick = function(){ reenviar("borrar", "data-ts");    };
+
 //  A que anotacion le estamos poniendo grafico desde la lista.
 var fotoPara = null;
 g("fLista").onchange = async function(){
@@ -578,7 +650,7 @@ function pintar(){
       + '<button class="editar" type="button" data-ed="'+r.ts+'" title="Modificar">✎</button>'
       + '<button class="borrar" type="button" data-ts="'+r.ts+'" title="Borrar">×</button>'
       + (r.img ? '<button class="sacar" type="button" data-sacar="'+r.ts+'">Sacar</button>' : '')
-      + '</span></li>';
+      + '</span><span class="flecha">›</span></li>';
   }).join("");
   //  EL GRAFICO SE PONE DESDE AQUI, SIN SUBIR AL FORMULARIO.
   //  Antes habia que darle a ✎, lo cual mandaba arriba, al mismo sitio
@@ -590,6 +662,22 @@ function pintar(){
     b.onclick = function(){
       fotoPara = +b.dataset.foto;
       g("fLista").click();
+    };
+  });
+
+  //  TOCAR EL RENGLON ABRE LA HOJA DE OPCIONES.
+  //  Se excluye la miniatura, que ya tiene su propio uso (ver el grafico
+  //  en grande). Todo lo demas del renglon es zona de toque.
+  Array.prototype.forEach.call(g("lista").querySelectorAll("li"), function(li){
+    li.onclick = function(e){
+      //  La miniatura tiene su propio uso: abre el grafico en grande.
+      if(e.target.classList.contains("miniatura")) return;
+      //  Y CUANDO LA HOJA REENVIA EL CLIC al boton chico escondido, ese
+      //  clic BURBUJEA hasta aqui y volveria a abrir la hoja -- un ciclo.
+      //  Por eso se ignora todo lo que venga de la zona de acciones.
+      if(e.target.closest && e.target.closest(".acciones")) return;
+      var b = li.querySelector(".editar");
+      if(b) abrirHoja(+b.dataset.ed);
     };
   });
 
