@@ -144,6 +144,11 @@ dialog::backdrop{background:rgba(0,0,0,.7)}
 .dlg{padding:15px 16px}
 .dlg h3{margin:0 0 4px;font-size:15px;font-weight:660}
 .dlg p{margin:0 0 10px;font-size:12.5px;color:var(--tinta3);line-height:1.55}
+textarea.nota{width:100%;height:auto;min-height:92px;padding:11px 12px;border-radius:10px;
+  border:1px solid var(--linea2);background:var(--hundido);color:var(--tinta);
+  font:inherit;font-size:14.5px;line-height:1.45;margin-top:8px;resize:vertical;
+  white-space:pre-wrap;overflow-wrap:break-word}
+textarea.nota:focus{outline:none;border-color:var(--acento)}
 textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);border:1px solid var(--linea2);
   border-radius:9px;padding:9px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
 .dlg .fila{display:flex;gap:8px;margin-top:10px}
@@ -231,7 +236,16 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
 
 <div class="paso">
   <h2><span class="num">4</span> Nota <span class="opt">— opcional</span></h2>
-  <input type="text" id="nota" placeholder="lo que quieras recordar" maxlength="160">
+  <!--  TEXTAREA, no input de una linea: la nota se cortaba a la mitad y no
+        se podia releer lo escrito. Son el contexto de la entrada, asi que
+        tienen que verse completas. 240 caracteres en vez de 160.
+        OJO CON EL ENTER: cada anotacion es UN renglon en el texto que se
+        manda, y cruzar_anotaciones.py separa los campos por dos o mas
+        espacios. Un salto de linea partiria la anotacion en dos y el
+        parser leeria basura -- por eso al guardar los saltos se cambian
+        por un espacio (ver el boton guardar). -->
+  <textarea id="nota" class="nota" placeholder="lo que quieras recordar — por qué entraste, qué viste"
+            maxlength="240" rows="3"></textarea>
 
   <!-- FECHA Y HORA. Vacio = ahora mismo, que es el caso normal. Se llena
        solo al capturar una entrada atrasada, o al corregir la
@@ -326,7 +340,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v108 · 3 sep 2026";     // se sella al publicar
+var VERSION = "v109 · 3 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -790,7 +804,13 @@ g("guardar").onclick = async function(){
     avisar("La fecha no se entiende. Revisala.", false);
     return;
   }
-  var r = {ts: ts, tk: sel.tk, est: estTexto(), nota: g("nota").value.trim()};
+  //  LOS SALTOS DE LINEA SE APLANAN. La nota viaja dentro de un renglon
+  //  del texto que se manda, y un Enter lo partiria en dos: el cruce
+  //  leeria media anotacion y una linea suelta que no empareja con nada.
+  //  Se colapsa cualquier espacio en blanco seguido a un espacio simple,
+  //  que ademas protege el separador de campos (dos o mas espacios).
+  var notaPlana = g("nota").value.replace(/\s+/g, " ").trim();
+  var r = {ts: ts, tk: sel.tk, est: estTexto(), nota: notaPlana};
   if(fotoPendiente) r.img = fotoPendiente;
   var eraEdicion = !!editando;
   var tsViejo = editando;
