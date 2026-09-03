@@ -160,7 +160,7 @@ textarea{width:100%;height:180px;background:var(--fondo);color:var(--tinta2);bor
   <div class="tecla" id="estrategias"></div>
 </div>
 
-<div class="paso">
+<div class="paso" id="pasoFoto">
   <h2><span class="num">3</span> Gráfico <span class="opt">— opcional, pero vale más que la nota</span></h2>
   <div class="foto">
     <button type="button" id="btnCam">📷 Cámara</button>
@@ -278,7 +278,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v105 · 3 sep 2026";     // se sella al publicar
+var VERSION = "v106 · 3 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -566,10 +566,19 @@ function pintar(){
         g("pistaFoto").textContent = "Gráfico actual · " + kb(r.img.size);
       }else{
         g("quitarFoto").onclick();
+        //  Sin esto la pista quedaba con el texto generico y no habia
+        //  ninguna senal de que AQUI se le puede poner el grafico ahora.
+        g("pistaFoto").textContent = "Esta anotación no tiene gráfico — puedes agregarlo ahora.";
       }
       marcar("tickers","tk"); marcar("estrategias","est", true);
       resumen();
-      g("guardar").scrollIntoView({behavior:"smooth", block:"center"});
+      //  SE BAJA AL PASO DEL GRAFICO, NO AL BOTON DE GUARDAR.
+      //  Antes saltaba a "Anotar" y el paso 3 quedaba ARRIBA, fuera de
+      //  pantalla: parecia que no se podia agregar la imagen. Y agregar
+      //  el grafico despues es justo para lo que mas se usa editar --
+      //  la captura casi siempre se tiene un rato despues de la entrada.
+      //  Con block:"start" se ven el paso 3 y el 4 completos.
+      g("pasoFoto").scrollIntoView({behavior:"smooth", block:"start"});
     };
   });
   Array.prototype.forEach.call(g("lista").querySelectorAll(".borrar"), function(b){
