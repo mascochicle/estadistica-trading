@@ -536,7 +536,8 @@ const D={"c":[{"f":"2026-09-11","h":"16:20","t":"META","cp":"C","k":700,"v":"202
 var C = D.c, A = D.a;
 //  Se sella al generar el archivo, no en el navegador: asi la version
 //  dice de que corte de datos viene la pagina, no cuando se abrio.
-var VERSION = "v111 · 14 sep 2026";
+var VERSION = "v115 · 22 sep 2026";
+var FRESCURA = {"extracto": "2026-09-11", "anotacion": "2026-09-22 08:05", "armado": "2026-09-22 09:59"};   // {extracto, anotacion, armado}; lo incrusta armar.py
 var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 //  Nombres completos para la lista de meses: el anio se elige arriba, asi
 //  que aqui basta con el mes y cabe escribirlo entero.
@@ -675,7 +676,9 @@ var instDe = function(o){ return o["in"] || "Opciones"; };
 //  Los tres cortes que mas se comparan van como botones y no como listas:
 //  se pueden encender varios a la vez, o apagar los que estorben. Cada fila
 //  guarda el conjunto de los ENCENDIDOS; con todos encendidos no filtra.
-var F = {cuenta:"IBKR", inst:null, oper:null, anos:null, cp:"", etapa:"", per:"", plazo:"", est:"", tk:"", mes:"", cierre:"", dia:""};
+//  ARRANQUE (22-sep-2026, a peticion): en la cuenta de PRACTICA, que es
+//  donde hoy se opera y se mira a diario. La real sigue a un clic.
+var F = {cuenta:SIMULADA, inst:null, oper:null, anos:null, cp:"", etapa:"", per:"", plazo:"", est:"", tk:"", mes:"", cierre:"", dia:""};
 if(CUENTAS.indexOf(F.cuenta) < 0) F.cuenta = CUENTAS[0] || "IBKR";
 
 //  Todo lo demas se cuenta y se filtra DENTRO de la cuenta elegida, para
@@ -875,13 +878,14 @@ function VAL_INST(){
 }
 var CP_ROTULO = function(v){ return v === "C" ? "Call" : "Put"; };
 
-//  ARRANQUE: IBKR y Acciones.
+//  ARRANQUE: SIM IBKR y Opciones (desde el 22-sep-2026; antes IBKR y Acciones).
 //
-//  Es donde Marco quiere caer al abrir: su cuenta principal y el instrumento
-//  con el que le va bien. Si el instrumento preferido no existe en la cuenta
+//  Es donde se quiere caer al abrir: la cuenta de practica y las opciones
+//  del seminario, que es lo que se esta operando. Si el instrumento preferido no existe en la cuenta
 //  elegida -- Binance solo tiene cripto -- se encienden todos, que es lo
 //  unico que no deja la pantalla vacia.
-var INST_PREFERIDO = "Acciones";
+var INST_PREFERIDO = "Opciones";
+var OPER_PREFERIDA = "Opciones seminario";
 function instPorDefecto(){
   var v = VAL_INST();
   //  Se prenden TODOS los que existen en los datos, no solo los de esta
@@ -905,7 +909,22 @@ instPorDefecto();
 //  filas, la lista de anios sale vacia y el filtro de anio termina apagando
 //  TODO. La pantalla quedaba en cero sin decir por que.
 reiniciar("oper",    VAL_OPER);
+//  Solo la operativa preferida, si existe en lo que se esta viendo; las
+//  demas se apagan (un clic en el rail las vuelve a prender).
+if(F.oper[OPER_PREFERIDA]){
+  Object.keys(F.oper).forEach(function(x){ F.oper[x] = (x === OPER_PREFERIDA); });
+}
 reiniciar("anos",    VAL_ANOS);
+//  Y la corrida (SIM 1, SIM 2...) mas nueva: la que sigue abierta, que es la
+//  que se quiere ver al abrir. Solo al arrancar; al cambiar de contexto
+//  vuelve a "todos" como siempre.
+(function(){
+  var vs = VAL_CORRIDA().filter(function(v){ return /^SIM \d+$/.test(v); });
+  if(vs.length > 1){
+    vs.sort(function(a, b){ return parseInt(a.slice(4), 10) - parseInt(b.slice(4), 10); });
+    F.per = vs[vs.length - 1];
+  }
+})();
 
 //  MUDARSE DE CONTEXTO
 //  Cambiar de cuenta, de instrumento o de operativa deja sin sentido los
@@ -2319,6 +2338,34 @@ g("pie").innerHTML = "Los datos salen de los extractos de actividad de IBKR y de
 
 pintarBotoneras();
 g("ver").textContent = VERSION;
+//  PASTILLA DE FRESCURA (22-sep-2026). Dice de cuando es el dato, no cuando se
+//  abrio la pagina. Verde: extracto de menos de 8 dias; ambar: 8 a 20; rojo:
+//  mas viejo (o sin dato). La anotacion se muestra aparte, sin color: puede no
+//  haber operado en dias y eso no es una falla.
+(function(){
+  try{
+    var F = (typeof FRESCURA === "object" && FRESCURA) || {};
+    var hoy = new Date();
+    var dias = function(s){ if(!s) return 999; var d = new Date(s.replace(" ", "T")); return (hoy - d) / 864e5; };
+    var corto = function(s){ return s ? s.slice(5).replace(/^(\d{2})-(\d{2})/, "$2/$1") : "—"; };
+    var edad = dias(F.extracto);
+    var color = edad < 8 ? "#3fb950" : edad < 20 ? "#d29922" : "#f85149";
+    //  Va en el riel, que es angosto: corto en pantalla y el detalle en el title.
+    var texto = "extracto " + corto(F.extracto)
+              + (edad >= 20 ? " · viejo" : edad >= 8 ? " · falta bajar" : "")
+              + " · anot. " + corto(F.anotacion).slice(0, 5);
+    var s = document.createElement("span");
+    s.id = "frescura";
+    s.textContent = texto;
+    s.title = "De cuándo es el dato del tablero — extracto de IBKR al " + (F.extracto || "?")
+            + " · anotación más nueva " + (F.anotacion || "?") + " · armado " + (F.armado || "?")
+            + ". Verde: extracto de menos de 8 días; ámbar: 8 a 20; rojo: más.";
+    s.style.cssText = "display:inline-block;margin:4px 0 0;padding:2px 8px;border-radius:999px;font-weight:600;"
+                    + "letter-spacing:0;text-transform:none;white-space:nowrap;font-size:10.5px;color:" + color
+                    + ";border:1px solid " + color + ";opacity:.9";
+    g("ver").parentNode.appendChild(s);
+  }catch(e){}
+})();
 
 pintar();
 
