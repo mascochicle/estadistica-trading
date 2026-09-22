@@ -352,7 +352,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v112 · 22 sep 2026";     // se sella al publicar
+var VERSION = "v113 · 22 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -906,7 +906,26 @@ g("guardar").onclick = async function(){
          + (r.img ? " con gráfico" : ""), true);
   limpiarForm();
   pintar();
+  enviarSolo();
 };
+
+//  ENVIO AUTOMATICO (22-sep-2026, a peticion: "el envio debe ser
+//  automatico"). Cada vez que se guarda o edita una anotacion se manda
+//  el historial completo a los destinos configurados, en segundo plano.
+//  Si no llega (sin senal, sin Tailscale) solo avisa; el boton Enviar y
+//  Compartir siguen ahi para mandarlo despues.
+async function enviarSolo(){
+  var c = cfgLeer();
+  if(!c.url && !c.srvToken) return;
+  try{
+    var res = await enviarATodos(textoDeTodas());
+    var bien = res.filter(function(p){ return p[1].ok; }).length;
+    avisar((bien === res.length ? "Enviado: " : bien ? "Llegó a uno: " : "No se envió: ")
+           + pintarResultados(res), bien > 0);
+  }catch(e){
+    avisar("No se envió — revisa la señal.", false);
+  }
+}
 
 // =====================================================================
 //  SACAR LOS GRAFICOS
@@ -996,8 +1015,9 @@ function prepararDlg(){
 g("exportar").onclick = async function(){
   if(!datos.length){ avisar("Todavía no has anotado nada.", false); return; }
   prepararDlg();
-  if(!cfgLeer().url){
-    //  Sin puente configurado no hay a donde mandar: se abre el cuadro con
+  var cc = cfgLeer();
+  if(!cc.url && !cc.srvToken){
+    //  Sin destino configurado no hay a donde mandar: se abre el cuadro con
     //  las otras formas, que es lo unico util que se puede ofrecer.
     g("dlg").showModal();
     g("cfg").style.display = "block";
@@ -1007,10 +1027,12 @@ g("exportar").onclick = async function(){
   var b = this, antes = b.textContent;
   b.disabled = true; b.textContent = "Enviando…";
   try{
-    var res = await mandarAlPuente(textoDeTodas());
-    if(res.ok) avisar("Enviadas " + datos.length
-                      + (datos.length === 1 ? " anotación." : " anotaciones."), true);
-    else avisar("No se pudo: " + (res.error || "?"), false);
+    var res = await enviarATodos(textoDeTodas());
+    var bien = res.filter(function(p){ return p[1].ok; }).length;
+    if(bien) avisar("Enviadas " + datos.length
+                    + (datos.length === 1 ? " anotación — " : " anotaciones — ")
+                    + pintarResultados(res), true);
+    else avisar("No se pudo: " + pintarResultados(res), false);
   }catch(e){
     avisar("No se pudo enviar — revisa la señal.", false);
   }
