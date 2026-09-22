@@ -53,9 +53,9 @@ button{font:inherit;cursor:pointer}
 .t.est{font-size:12.5px;font-weight:520;padding:9px 11px;min-height:42px}
 .t[aria-pressed="true"]{background:var(--acento);border-color:var(--acento);color:var(--fondo)}
 .t:focus-visible{outline:2px solid var(--acento);outline-offset:2px}
-input[type=text],input[type=url],input[type=datetime-local]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--linea2);
+input[type=text],input[type=url],input[type=password],input[type=datetime-local]{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--linea2);
   background:var(--hundido);color:var(--tinta);font:inherit;font-size:14.5px;min-height:46px;margin-top:8px}
-input[type=text]:focus,input[type=url]:focus,input[type=datetime-local]:focus{outline:none;border-color:var(--acento)}
+input[type=text]:focus,input[type=url]:focus,input[type=password]:focus,input[type=datetime-local]:focus{outline:none;border-color:var(--acento)}
 .fh{display:block;margin:14px 0 6px;font-size:14px;color:var(--tenue)}
 
 .foto{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -300,12 +300,19 @@ WhatsApp, Drive, tu galería&mdash; y de paso te quedan respaldados.</p>
     <button class="chico" id="dlgCfg">Envío automático</button>
     <button id="dlgCerrar">Cerrar</button>
   </div>
+  <p id="envDetalle" style="margin:4px 0 0"></p>
   <div id="cfg" style="display:none;margin-top:10px">
-    <p style="margin:0 0 7px">Pega aquí lo que te dio el script de Drive. Se guarda
-    solo en este teléfono. Ver <b>Puente Drive — como instalarlo</b>.</p>
+    <p style="margin:0 0 7px"><b>Servidor de casa</b> (el Beelink, por Tailscale). Pega el
+    token que te da el QR de <code>ximbal-token-captura</code>. La dirección ya viene puesta.</p>
+    <input id="cfgSrvUrl" type="url" placeholder="URL del servidor" autocomplete="off" spellcheck="false">
+    <input id="cfgSrvToken" type="password" placeholder="token del servidor" autocomplete="off" spellcheck="false">
+    <p style="margin:10px 0 7px"><b>Drive</b> (el script de Google; sigue en paralelo por ahora).
+    Ver <b>Puente Drive — como instalarlo</b>.</p>
     <input id="cfgUrl" type="url" placeholder="URL del script (termina en /exec)"
            autocomplete="off" spellcheck="false">
     <input id="cfgClave" type="text" placeholder="clave" autocomplete="off" spellcheck="false">
+    <p style="margin:7px 0 0;opacity:.8">Todo se guarda solo en este teléfono. Con los dos puestos,
+    <b>Enviar</b> manda a los dos y dice cómo le fue a cada uno.</p>
     <div class="fila">
       <button class="pri" id="cfgGuardar">Guardar</button>
       <button id="cfgProbar">Probar</button>
@@ -345,7 +352,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v110 · 3 sep 2026";     // se sella al publicar
+var VERSION = "v112 · 22 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -1050,8 +1057,16 @@ function nombreArchivo(){
 //  manda primero una peticion de permiso (preflight) que Apps Script no
 //  contesta, y el envio falla sin decir por que.
 var CFG = "captura.puente";
+//  Segundo destino (22-sep-2026): el servidor de casa (Beelink), por Tailscale.
+//  Contrato de «Red Servidor»: POST /captura/anotacion con Bearer y JSON
+//  {"texto"}; GET /captura/ping con Bearer para probar. La URL es fija y
+//  puede ir en el codigo (solo se alcanza dentro de la tailnet); el token NO.
+var SRV_URL = "https://ximbal-node.tail611cba.ts.net/captura";
 function cfgLeer(){
-  try{ return JSON.parse(localStorage.getItem(CFG) || "{}"); }catch(e){ return {}; }
+  var c = {};
+  try{ c = JSON.parse(localStorage.getItem(CFG) || "{}") || {}; }catch(e){}
+  if(c.srvUrl === undefined) c.srvUrl = SRV_URL;
+  return c;
 }
 async function mandarAlPuente(texto){
   var c = cfgLeer();
@@ -1063,24 +1078,60 @@ async function mandarAlPuente(texto){
   });
   return await r.json();
 }
+//  Fuera de la tailnet la peticion no rebota: se queda colgada. Por eso el
+//  tope de 15 s y el aviso de Tailscale.
+async function pedirServidor(ruta, opciones){
+  var c = cfgLeer();
+  if(!c.srvToken) return {ok:false, error:"sin token"};
+  var ctl = new AbortController(), reloj = setTimeout(function(){ ctl.abort(); }, 15000);
+  try{
+    var r = await fetch((c.srvUrl || SRV_URL).replace(/\/+$/, "") + ruta, Object.assign({
+      headers: {"Authorization": "Bearer " + c.srvToken, "Content-Type": "application/json"},
+      signal: ctl.signal
+    }, opciones || {}));
+    var j = null;
+    try{ j = await r.json(); }catch(e){}
+    if(j && typeof j.ok === "boolean") return j;
+    return {ok:false, error:"contestó " + r.status};
+  }catch(e){
+    return {ok:false, error:"No llegó al servidor. ¿Tailscale está prendido?"};
+  }finally{ clearTimeout(reloj); }
+}
+function mandarAlServidor(texto){
+  return pedirServidor("/anotacion", {method:"POST", body: JSON.stringify({texto: texto})});
+}
+function probarServidor(){ return pedirServidor("/ping", {method:"GET"}); }
+
+//  Manda a los destinos que esten configurados y cuenta como le fue a cada uno.
+async function enviarATodos(texto){
+  var c = cfgLeer(), tareas = [];
+  if(c.srvToken) tareas.push(mandarAlServidor(texto).then(function(r){ return ["Servidor", r]; }));
+  if(c.url) tareas.push(mandarAlPuente(texto).then(function(r){ return ["Drive", r]; },
+                                             function(e){ return ["Drive", {ok:false, error:"sin señal"}]; }));
+  return Promise.all(tareas);
+}
+function pintarResultados(res){
+  return res.map(function(p){
+    var n = p[0], r = p[1];
+    return n + (r.ok ? (r.repetido ? " ✓ (ya lo tenía)" : " ✓") : " ✗ " + (r.error || "?"));
+  }).join("  ·  ");
+}
 
 g("dlgEnviar").onclick = async function(){
-  var b = this, txt = g("dlgTxt").value;
+  var b = this, txt = g("dlgTxt").value, c = cfgLeer();
   if(!txt) return;
-  if(!cfgLeer().url){
-    //  Sin puente configurado, mandar al de compartir es mas util que un
+  if(!c.url && !c.srvToken){
+    //  Sin destino configurado, mandar al de compartir es mas util que un
     //  error: el trabajo se hace igual, nada mas con un paso extra.
     g("cfg").style.display = "block";
     g("cfgEstado").textContent = "Primero configura el envío automático, o usa Compartir.";
     return;
   }
-  b.disabled = true; b.textContent = "Enviando…";
-  try{
-    var res = await mandarAlPuente(txt);
-    b.textContent = res.ok ? "Enviado ✓" : ("No se pudo: " + (res.error || "?"));
-  }catch(e){
-    b.textContent = "No se pudo — revisa la señal";
-  }
+  b.disabled = true; b.textContent = "Enviando…"; g("envDetalle").textContent = "";
+  var res = await enviarATodos(txt);
+  var bien = res.filter(function(p){ return p[1].ok; }).length;
+  b.textContent = bien === res.length ? "Enviado ✓" : (bien ? "Llegó a uno" : "No se pudo");
+  g("envDetalle").textContent = pintarResultados(res);
   setTimeout(function(){ b.disabled = false; b.textContent = "Enviar"; }, 2600);
 };
 
@@ -1089,6 +1140,8 @@ g("dlgCfg").onclick = function(){
   d.style.display = abierto ? "none" : "block";
   if(!abierto){
     var c = cfgLeer();
+    g("cfgSrvUrl").value = c.srvUrl || SRV_URL;
+    g("cfgSrvToken").value = c.srvToken || "";
     g("cfgUrl").value = c.url || "";
     g("cfgClave").value = c.clave || "";
   }
@@ -1099,19 +1152,32 @@ g("cfgGuardar").onclick = function(){
     g("cfgEstado").textContent = "Esa URL no termina en /exec — revisa que sea la de la implementación.";
     return;
   }
-  localStorage.setItem(CFG, JSON.stringify({url: url, clave: g("cfgClave").value.trim()}));
-  g("cfgEstado").textContent = url ? "Guardado en este teléfono." : "Borrado.";
+  var nuevo = {url: url, clave: g("cfgClave").value.trim(),
+               srvUrl: g("cfgSrvUrl").value.trim() || SRV_URL,
+               srvToken: g("cfgSrvToken").value.trim()};
+  localStorage.setItem(CFG, JSON.stringify(nuevo));
+  var que = [];
+  if(nuevo.srvToken) que.push("servidor");
+  if(nuevo.url) que.push("Drive");
+  g("cfgEstado").textContent = que.length ? ("Guardado en este teléfono: " + que.join(" y ") + ".") : "Sin destinos.";
 };
 g("cfgProbar").onclick = async function(){
+  var c = cfgLeer(), partes = [];
   g("cfgEstado").textContent = "Probando…";
-  try{
-    var res = await mandarAlPuente("PRUEBA del puente — se puede borrar");
-    g("cfgEstado").textContent = res.ok
-      ? ("Funcionó ✓  se creó " + res.archivo)
-      : ("Contestó con error: " + (res.error || "?"));
-  }catch(e){
-    g("cfgEstado").textContent = "No contestó. Revisa la URL y que esté publicado para «cualquier usuario».";
+  if(c.srvToken){
+    var s = await probarServidor();
+    partes.push("Servidor " + (s.ok ? ("✓ tiene " + s.archivos + " archivos" + (s.ultimo ? ", último " + s.ultimo : ""))
+                                    : ("✗ " + (s.error || "?"))));
   }
+  if(c.url){
+    try{
+      var res = await mandarAlPuente("PRUEBA del puente — se puede borrar");
+      partes.push("Drive " + (res.ok ? ("✓ se creó " + res.archivo) : ("✗ " + (res.error || "?"))));
+    }catch(e){
+      partes.push("Drive ✗ no contestó (¿URL bien y publicado para «cualquier usuario»?)");
+    }
+  }
+  g("cfgEstado").textContent = partes.length ? partes.join("  ·  ") : "No hay nada configurado.";
 };
 
 g("dlgDrive").onclick = async function(){
