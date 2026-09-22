@@ -352,7 +352,7 @@ var EST_OPCIONES = ["0DTE","Gap a la alza","Gap a la alza IMP","Gap B a la alza"
   "Estrategia earnings","Fed speech","Estrategia Inflacion","Método propio","Sin estrategia clara"];
 var ESTRATEGIAS = EST_OPCIONES;   // la que se esta pintando ahora;
 var LLAVE_VIEJA = "capturas_v1";
-var VERSION = "v113 · 22 sep 2026";     // se sella al publicar
+var VERSION = "v114 · 22 sep 2026";     // se sella al publicar
 var MAX_LADO = 1100, CALIDAD = 0.62;
 
 var g = function(id){ return document.getElementById(id); };
@@ -1257,7 +1257,40 @@ g("dlgBorrar").onclick = async function(){
     avisar("No se pudo abrir el almacén: " + (e.message || e), false);
   }
   pintar(); resumen();
+  prellenarDesdeUrl();
 })();
+
+//  ENTRADA DESDE EL GATILLO (22-sep-2026). El boton "Anotar en la app" del
+//  Telegram abre esta pagina con ?tk=SPY&est=Primera%20vela%20roja&cuando=
+//  2026-09-22T08:01 (hora del telefono, CDMX). Se rellena el formulario como
+//  si se fuera a editar, y solo falta escribir la nota y guardar. La direccion
+//  se limpia enseguida para que recargar no vuelva a rellenar.
+function prellenarDesdeUrl(){
+  var q;
+  try{ q = new URLSearchParams(location.search); }catch(e){ return; }
+  var tk = (q.get("tk") || "").toUpperCase().trim();
+  if(!tk) return;
+  var est = (q.get("est") || "").split("+").map(function(x){ return x.trim(); }).filter(function(x){ return x; });
+  if(est.length){
+    var esOpc = EST_OPCIONES.indexOf(est[0]) >= 0;
+    var modoQ = esOpc ? "Opciones" : "Intradia";
+    if(modoQ !== sel.modo){
+      sel.modo = modoQ;
+      try{ localStorage.setItem("modo_captura", sel.modo); }catch(e){}
+      aplicarModo();
+    }
+  }
+  sel.tk = tk;
+  sel.est = est;
+  g("otroTk").value = TICKERS.indexOf(tk) >= 0 ? "" : tk;
+  g("cuando").value = q.get("cuando") || "";
+  marcar("tickers","tk"); marcar("estrategias","est", true);
+  resumen();
+  try{ history.replaceState(null, "", location.pathname); }catch(e){}
+  avisar("Entrada del gatillo: " + tk + (est.length ? " · " + est.join(" + ") : "")
+         + " — escribe la nota y guarda.", true);
+  setTimeout(function(){ g("nota").focus(); g("nota").scrollIntoView({block:"center"}); }, 150);
+}
 
 g("ver").textContent = VERSION;
 
