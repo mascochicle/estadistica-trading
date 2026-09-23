@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Estadística de Trading</title>
 <style>
 :root{
@@ -510,6 +511,20 @@ svg{display:block;width:100%;height:auto;overflow:visible}
     <div id="grafCierre"></div>
     <div class="scroll" style="margin-top:12px"><table><thead><tr id="hCierre"></tr></thead><tbody id="bCierre"></tbody></table></div>
   </div>
+
+  <!--  LA SOMBRA (23-sep-2026): las senales que el Vigia propuso, seguidas
+        como si se hubiera entrado, entre Marco o no. No son operaciones de
+        ninguna cuenta: por eso no obedece a los filtros de arriba.  -->
+  <div class="tarjeta soloOpciones" id="cardSombra" data-card="sombra">
+    <h2>La sombra: todas las señales, entre o no <span class="mut" id="nSombra" style="font-weight:400;font-size:12.5px"></span></h2>
+    <p class="nota">Cada señal del seminario que el Vigía propuso con contrato, seguida como si se hubiera
+    entrado: compra límite al ask (solo cuenta si el precio regresó a tocarla), dos ventas límite
+    alternativas al +100% y al +120%, y si ninguna se tocó, lo que quedó al vencer. Sin comisiones.
+    Solo entran las señales terminadas; con menos de 25 por estrategia es ruido. No obedece a los
+    filtros de arriba: no son operaciones de ninguna cuenta.</p>
+    <div class="scroll"><table><thead><tr id="hSombra"></tr></thead><tbody id="bSombra"></tbody></table></div>
+    <p class="nota" id="pieSombra" style="display:block;margin-top:10px"></p>
+  </div>
 </div>
 
 <div class="tarjeta" id="cardOps">
@@ -536,8 +551,8 @@ const D={"c":[{"f":"2026-09-11","h":"16:20","t":"META","cp":"C","k":700,"v":"202
 var C = D.c, A = D.a;
 //  Se sella al generar el archivo, no en el navegador: asi la version
 //  dice de que corte de datos viene la pagina, no cuando se abrio.
-var VERSION = "v118 · 23 sep 2026";
-var FRESCURA = {"extracto": "2026-09-22", "anotacion": "2026-09-22 08:05", "armado": "2026-09-23 08:19"};   // {extracto, anotacion, armado}; lo incrusta armar.py
+var VERSION = "v119 · 23 sep 2026";
+var FRESCURA = {"extracto": "2026-09-22", "anotacion": "2026-09-22 08:05", "armado": "2026-09-23 13:30"};   // {extracto, anotacion, armado}; lo incrusta armar.py
 var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 //  Nombres completos para la lista de meses: el anio se elige arriba, asi
 //  que aqui basta con el mes y cabe escribirlo entero.
