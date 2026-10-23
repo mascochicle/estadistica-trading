@@ -551,14 +551,15 @@ const D={"c":[{"f":"2026-10-23","h":"13:06","t":"BKYI","cp":"","k":null,"v":"202
 var C = D.c, A = D.a, S = D.s || [];
 //  Se sella al generar el archivo, no en el navegador: asi la version
 //  dice de que corte de datos viene la pagina, no cuando se abrio.
-var VERSION = "v851 · 23 oct 2026";
-var FRESCURA = {"extracto": "2026-10-22", "anotacion": "2026-10-23 11:14", "armado": "2026-10-23 11:37"};   // {extracto, anotacion, armado}; lo incrusta armar.py
+var VERSION = "v852 · 23 oct 2026";
+var FRESCURA = {"extracto": "2026-10-22", "anotacion": "2026-10-23 11:14", "armado": "2026-10-23 11:47"};   // {extracto, anotacion, armado}; lo incrusta armar.py
 //  15-oct-2026 (Marco: "si le diera clic a cada una me saliera el detalle del grafico con los
 //  trades"). Las graficas ya viven en la pagina de revision intradia (artefacto privado de Claude,
 //  la publica Inversiones a mano); cada sombra lleva su clave (sid) y la pagina salta a ella con #clave.
 //  21-oct-2026: la revision vive en el nodo (sitio.py), ya no en el artefacto de claude.ai. Si la pagina se sirve desde
 //  el mismo sitio, el enlace es relativo; desde github.io va a la direccion del tailnet (solo abre en los aparatos de Marco).
 var REVISION_INTRADIA = (location.pathname.indexOf("/trading/") === 0) ? "/trading/revision/" : "https://ximbal-node.tail611cba.ts.net/trading/revision/";
+var REVISION_INTRADIA_2 = (location.pathname.indexOf("/trading/") === 0) ? "/trading/revision2/" : "https://ximbal-node.tail611cba.ts.net/trading/revision2/";   // 23-oct-2026: la sombra 2 (estrategia nueva)
 var MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 //  Nombres completos para la lista de meses: el anio se elige arriba, asi
 //  que aqui basta con el mes y cabe escribirlo entero.
@@ -735,7 +736,8 @@ var SOMBRA = "Sombra";
 //  5-oct-2026: hay una segunda sombra, la intradia de acciones (patrones de Ross
 //  Cameron, `Vigia Intradia`). Cada sombra es su propio universo: se ve sola.
 var SOMBRA_I = "Sombra intradía";
-function esSombra(p){ return p === SOMBRA || p === SOMBRA_I; }
+var SOMBRA_I2 = "Sombra intradía 2";   // 23-oct-2026: la estrategia nueva de Marco, sombra aparte en el nodo
+function esSombra(p){ return p === SOMBRA || p === SOMBRA_I || p === SOMBRA_I2; }
 function sombraOculta(o){ return esSombra(F.per) ? o.pr !== F.per : esSombra(o.pr); }
 
 function deCuenta(conSombra){
@@ -2188,7 +2190,7 @@ var precioTxt = function(n){
 var CELDA = {
   f:  function(t){ return '<td class="izq mut">'+t.f+'</td>'; },
   t:  function(t){
-    if(t.sid) return '<td class="izq" style="font-weight:640"><a href="'+REVISION_INTRADIA+'#'+encodeURIComponent(t.sid)
+    if(t.sid) return '<td class="izq" style="font-weight:640"><a href="'+(t.pr === SOMBRA_I2 ? REVISION_INTRADIA_2 : REVISION_INTRADIA)+'#'+encodeURIComponent(t.sid)
       +'" target="_blank" rel="noopener" title="Ver la gráfica con la entrada, el stop y la salida en la página de revisión"'
       +' style="color:inherit;text-decoration:underline dotted;text-underline-offset:3px">'+t.t+' ↗</a></td>';
     return '<td class="izq" style="font-weight:640">'+t.t+'</td>';
@@ -2462,7 +2464,8 @@ function pintarEncabezado(){
     + (ap ? " · " + ap + " aperturas" : "")
     + (F.cuenta === "Simulada" ? " · cuenta de práctica" : "")
     + (F.per === SOMBRA ? " · sombra: señales seguidas como si se hubiera entrado, cerradas al +100; no son operaciones tuyas" : "")
-    + (F.per === SOMBRA_I ? " · sombra intradía: la estrategia Marco (líneas, techos y banderas en 5 y 2 min) seguida como si se hubiera entrado ($50 de riesgo, objetivo 2 a 1); no son operaciones tuyas" : "");
+    + (F.per === SOMBRA_I ? " · sombra intradía: la estrategia Marco (líneas, techos y banderas en 5 y 2 min) seguida como si se hubiera entrado ($50 de riesgo, objetivo 2 a 1); no son operaciones tuyas" : "")
+    + (F.per === SOMBRA_I2 ? " · sombra intradía 2: la ESTRATEGIA NUEVA (solo líneas de tendencia con las reglas del 23-oct) seguida como si se hubiera entrado ($50 de riesgo, objetivo 2 a 1); no son operaciones tuyas" : "");
 }
 
 var sinEt = C.filter(function(o){return !o.e;}).length;
