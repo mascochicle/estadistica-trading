@@ -562,8 +562,8 @@ const D={"c":[{"f":"2026-11-16","h":"16:10","t":"GLD","cp":"P","k":343,"v":"2026
 var C = D.c, A = D.a, S = D.s || [];
 //  Se sella al generar el archivo, no en el navegador: asi la version
 //  dice de que corte de datos viene la pagina, no cuando se abrio.
-var VERSION = "v4418 · 16 nov 2026";
-var FRESCURA = {"extracto": "2026-11-13", "anotacion": "2026-11-16 10:01", "armado": "2026-11-16 15:19"};   // {extracto, anotacion, armado}; lo incrusta armar.py
+var VERSION = "v4419 · 16 nov 2026";
+var FRESCURA = {"extracto": "2026-11-13", "anotacion": "2026-11-16 10:01", "armado": "2026-11-16 15:22"};   // {extracto, anotacion, armado}; lo incrusta armar.py
 //  15-oct-2026 (Marco: "si le diera clic a cada una me saliera el detalle del grafico con los
 //  trades"). Las graficas ya viven en la pagina de revision intradia (artefacto privado de Claude,
 //  la publica Inversiones a mano); cada sombra lleva su clave (sid) y la pagina salta a ella con #clave.
@@ -981,12 +981,22 @@ reiniciar("anos",    VAL_ANOS);
   //  29-oct-2026: la sombra intradia 2 (la estrategia nueva, la que se revisa a diario) primero; si no esta, la 1.
   if(todas.indexOf(SOMBRA_I2) >= 0){ F.per = SOMBRA_I2; reiniciar("anos", VAL_ANOS); return; }
   if(todas.indexOf(SOMBRA_I) >= 0){ F.per = SOMBRA_I; reiniciar("anos", VAL_ANOS); return; }
-  var vs = todas.filter(function(v){ return /^SIM \d+$/.test(v); });
-  if(vs.length > 1){
-    vs.sort(function(a, b){ return parseInt(a.slice(4), 10) - parseInt(b.slice(4), 10); });
-    F.per = vs[vs.length - 1];
-  }
+  ultimaCorrida(true);
 })();
+
+//  16-nov-2026 (Marco: «en estadística paper se muestran todos; que sea el SIM 4 de acciones y el último SIM de opciones»):
+//  el periodo por defecto es la ULTIMA corrida (SIM N mas alto) de lo que se esta viendo, no solo al abrir: tambien al
+//  cambiar de Real/Paper, de cuenta o de instrumento. «todos» sigue a un clic. Con forzar=false (al cambiar de operativa)
+//  solo se corrige si la corrida elegida dejo de existir; si Marco eligio «todos», se respeta.
+function ultimaCorrida(forzar){
+  if(F.cuenta === SOMBRA_CU) return;              // la Sombra elige su propia corrida en pintaCorrida()
+  var vals = VAL_CORRIDA();
+  if(!forzar && (!F.per || vals.indexOf(F.per) >= 0)) return;
+  var vs = vals.filter(function(v){ return /^SIM \d+$/.test(v); });
+  vs.sort(function(a, b){ return parseInt(a.slice(4), 10) - parseInt(b.slice(4), 10); });
+  F.per = vs.length ? vs[vs.length - 1] : "";
+  reiniciar("anos", VAL_ANOS);
+}
 
 //  MUDARSE DE CONTEXTO
 //  Cambiar de cuenta, de instrumento o de operativa deja sin sentido los
@@ -999,6 +1009,7 @@ function mudarContexto(ajuste){
   reiniciar("oper", VAL_OPER);
   reiniciar("anos", VAL_ANOS);
   if(ajuste) ajuste();
+  ultimaCorrida(true);
   ajustarMeses();
   pintarBotoneras(); pintarEncabezado(); pintar();
 }
@@ -1055,6 +1066,7 @@ var pintaInst = botonera("chipsInst", "pistaInst", TODOS_INST, instDe, "inst", n
         F.plazo = ""; F.est = ""; F.tk = ""; F.mes = ""; F.cierre = ""; F.etapa = ""; F.per = ""; F.cp = ""; F.dia = "";
     reiniciar("oper", VAL_OPER);      // antes que los anios, ver arriba
     reiniciar("anos", VAL_ANOS);
+    ultimaCorrida(true);
  ajustarMeses();
     pintarBotoneras(); pintarEncabezado(); pintar();
   }, true, VAL_INST, saltarInst);
@@ -1073,7 +1085,7 @@ try{ operMulti = localStorage.getItem("operVarios") === "1"; }catch(e){}
 
 var pintaOper = botonera("chipsOper", null, TODAS_OPER, operDe, "oper", null,
   function(){ return operMulti ? false : "fijo"; },
-  function(){ pintaOper(); pintarEncabezado(); pintar(); }, true, VAL_OPER, saltarOper);
+  function(){ ultimaCorrida(false); pintaOper(); pintaCorrida(); pintarEncabezado(); pintar(); }, true, VAL_OPER, saltarOper);
 
 (function(){
   var c = g("operVarios");
@@ -1124,6 +1136,7 @@ function irACuenta(v){
   F.plazo = ""; F.est = ""; F.tk = ""; F.mes = ""; F.cierre = ""; F.etapa = ""; F.per = ""; F.cp = ""; F.dia = "";
   reiniciar("oper", VAL_OPER);
   reiniciar("anos", VAL_ANOS);
+  ultimaCorrida(true);
   ajustarMeses();
   pintarBotoneras(); pintarEncabezado(); pintar();
 }
@@ -1202,6 +1215,7 @@ function pintaCuenta(){
               F.plazo = ""; F.est = ""; F.tk = ""; F.mes = ""; F.cierre = ""; F.etapa = ""; F.per = ""; F.cp = ""; F.dia = "";
       reiniciar("oper", VAL_OPER);    // antes que los anios, ver arriba
       reiniciar("anos", VAL_ANOS);
+      ultimaCorrida(true);
  ajustarMeses();
       pintarBotoneras(); pintarEncabezado(); pintar();
     };
