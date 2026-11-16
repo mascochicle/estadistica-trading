@@ -437,7 +437,7 @@ svg{display:block;width:100%;height:auto;overflow:visible}
 <div class="rejilla" id="rejGraf">
   <div class="tarjeta" data-card="acum">
     <h2>Resultado acumulado</h2>
-    <p class="nota">La suma corrida de lo ganado y perdido, mes a mes. Lo que importa
+    <p class="nota">La suma corrida de lo ganado y perdido, día a día. Lo que importa
     no es cada barra suelta sino si la línea sube.</p>
     <div id="grafAcum"></div>
   </div>
@@ -562,8 +562,8 @@ const D={"c":[{"f":"2026-11-16","h":"16:10","t":"GLD","cp":"P","k":343,"v":"2026
 var C = D.c, A = D.a, S = D.s || [];
 //  Se sella al generar el archivo, no en el navegador: asi la version
 //  dice de que corte de datos viene la pagina, no cuando se abrio.
-var VERSION = "v4419 · 16 nov 2026";
-var FRESCURA = {"extracto": "2026-11-13", "anotacion": "2026-11-16 10:01", "armado": "2026-11-16 15:22"};   // {extracto, anotacion, armado}; lo incrusta armar.py
+var VERSION = "v4420 · 16 nov 2026";
+var FRESCURA = {"extracto": "2026-11-13", "anotacion": "2026-11-16 10:01", "armado": "2026-11-16 15:57"};   // {extracto, anotacion, armado}; lo incrusta armar.py
 //  15-oct-2026 (Marco: "si le diera clic a cada una me saliera el detalle del grafico con los
 //  trades"). Las graficas ya viven en la pagina de revision intradia (artefacto privado de Claude,
 //  la publica Inversiones a mano); cada sombra lleva su clave (sid) y la pagina salta a ella con #clave.
@@ -1402,16 +1402,22 @@ function grafAcumulado(){
   var v = vis().slice().sort(function(a,b){ return a.f < b.f ? -1 : a.f > b.f ? 1 : 0; });
   if(!v.length){ g("grafAcum").innerHTML = '<p class="vacio">Nada con estos filtros.</p>'; return; }
 
-  //  Se acumula por MES y no por operacion: con miles de cierres la curva
-  //  por operacion es una mancha, y por mes se lee la tendencia.
-  var m = {}, orden = [];
+  //  16-nov-2026 (Marco: «que se registre en la grafica por dia, que se vayan metiendo los puntos para ir viendo como va
+  //  agarrando la curva; por mes no se nota»): un punto por DIA con cierres. Antes era por mes (con miles de cierres la
+  //  curva por operacion es una mancha); por dia sigue siendo legible y en una corrida de dos semanas ya se ve la forma.
+  var m = {}, nd = {}, orden = [];
   v.forEach(function(o){
-    var k = o.f.slice(0,7);
-    if(m[k] === undefined){ m[k] = 0; orden.push(k); }
-    m[k] += o.g;
+    var k = o.f.slice(0,10);
+    if(m[k] === undefined){ m[k] = 0; nd[k] = 0; orden.push(k); }
+    m[k] += o.g; nd[k]++;
   });
   var acum = 0;
-  var pts = orden.map(function(k){ acum += m[k]; return {k:k, v:acum, mes:m[k]}; });
+  var pts = orden.map(function(k){ acum += m[k]; return {k:k, v:acum, dia:m[k], n:nd[k]}; });
+  //  El rotulo de abajo: con pocos meses, el dia ("12 nov"); con muchos, el mes de cada cambio de mes.
+  var largo = pts.length > 1 && (Date.parse(pts[pts.length-1].k) - Date.parse(pts[0].k)) > 120 * 864e5;
+  var MESES = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  var diaTxt = function(k){ return (+k.slice(8,10)) + " " + MESES[+k.slice(5,7) - 1] + " " + k.slice(0,4); };
+  var rotulo = function(k){ return largo ? mesTxt(k.slice(0,7)) : (+k.slice(8,10)) + " " + MESES[+k.slice(5,7) - 1]; };
 
   var W = anchoSVG("grafAcum"), H = 232, PL = 58, PR = 8, PT = 14, PB = 28;
   var iw = W-PL-PR, ih = H-PT-PB;
@@ -1440,13 +1446,26 @@ function grafAcumulado(){
      + 'fill="'+col+'" opacity=".10"/>';
   s += '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2" '
      + 'stroke-linejoin="round" stroke-linecap="round"/>';
+  //  Un punto por dia mientras quepan (hasta ~1 cada 6 px); el ultimo siempre, mas grande.
+  if(pts.length <= iw / 6)
+    pts.forEach(function(p,i){
+      if(i === ult) return;
+      s += '<circle cx="'+px(i).toFixed(1)+'" cy="'+py(p.v).toFixed(1)+'" r="2.4" fill="'+(p.dia >= 0 ? "var(--gana)" : "var(--pierde)")+'"/>';
+    });
   s += '<circle cx="'+px(ult).toFixed(1)+'" cy="'+py(pts[ult].v).toFixed(1)+'" r="3.5" fill="'+col+'"/>';
 
-  //  Solo las fechas que quepan abajo.
-  var cada = Math.max(1, Math.ceil(pts.length / Math.max(1, Math.floor(iw/48))));
-  pts.forEach(function(p,i){
-    if(i % cada && i !== ult) return;
-    s += '<text class="eje" x="'+px(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+mesTxt(p.k)+'</text>';
+  //  Solo las fechas que quepan abajo. Con historia larga, una por cambio de mes (y espaciadas); con poca, por dia.
+  var xs = [];
+  if(largo){
+    pts.forEach(function(p,i){ if(i === 0 || p.k.slice(0,7) !== pts[i-1].k.slice(0,7)) xs.push(i); });
+  } else {
+    pts.forEach(function(p,i){ xs.push(i); });
+  }
+  var ultX = -1e9, minSep = largo ? 48 : 40;
+  xs.forEach(function(i){
+    if(px(i) - ultX < minSep) return;
+    ultX = px(i);
+    s += '<text class="eje" x="'+px(i).toFixed(1)+'" y="'+(H-8)+'" text-anchor="middle">'+rotulo(pts[i].k)+'</text>';
   });
   //  zonas invisibles para el globo de datos
   pts.forEach(function(p,i){
@@ -1460,7 +1479,7 @@ function grafAcumulado(){
   Array.prototype.forEach.call(g("grafAcum").querySelectorAll(".pt"), function(el){
     var p = pts[+el.dataset.i];
     el.addEventListener("mousemove", function(e){
-      verTip(e, "<b>"+mesTxt(p.k)+"</b><br>acumulado "+usd(p.v)+"<br>ese mes "+usd(p.mes));
+      verTip(e, "<b>"+diaTxt(p.k)+"</b><br>acumulado "+usd(p.v)+"<br>ese día "+usd(p.dia)+" · "+p.n+(p.n === 1 ? " operación" : " operaciones"));
     });
     el.addEventListener("mouseleave", ocultaTip);
   });
