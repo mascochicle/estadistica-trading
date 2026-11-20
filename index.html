@@ -562,8 +562,8 @@ const D={"c":[{"f":"2026-11-19","h":"13:30","t":"TU","cp":"","k":null,"v":"2026-
 var C = D.c, A = D.a, S = D.s || [];
 //  Se sella al generar el archivo, no en el navegador: asi la version
 //  dice de que corte de datos viene la pagina, no cuando se abrio.
-var VERSION = "v4513 · 19 nov 2026";
-var FRESCURA = {"extracto": "2026-11-18", "anotacion": "2026-11-19 10:04", "armado": "2026-11-19 15:12"};   // {extracto, anotacion, armado}; lo incrusta armar.py
+var VERSION = "v4514 · 19 nov 2026";
+var FRESCURA = {"extracto": "2026-11-18", "anotacion": "2026-11-19 10:04", "armado": "2026-11-19 18:37"};   // {extracto, anotacion, armado}; lo incrusta armar.py
 //  15-oct-2026 (Marco: "si le diera clic a cada una me saliera el detalle del grafico con los
 //  trades"). Las graficas ya viven en la pagina de revision intradia (artefacto privado de Claude,
 //  la publica Inversiones a mano); cada sombra lleva su clave (sid) y la pagina salta a ella con #clave.
@@ -1331,6 +1331,80 @@ function verTip(e, html){
 }
 var ocultaTip = function(){ tip.className = "tip"; };
 
+// ---------------------------------------------------------------- CAPITAL (19-nov-2026)
+//  Marco: «en el caso de opciones lo que invierto es menor para ganar cierta cantidad; en intradía sí uso más capital.
+//  ¿Cómo puedo medir eso?... como el ROI». Una operación sola no lo dice: la opción es barata pero dura días y se juntan
+//  muchas; la acción es cara pero se libera en minutos. Lo que cuenta es CUÁNTO DINERO TUVO QUE HABER EN LA CUENTA: el
+//  máximo que estuvo metido al mismo tiempo. Rendimiento = resultado ÷ ese máximo.
+//  Precio de compra: en las sombras, o.p YA es la entrada; en las bitácoras y extractos, o.p es el precio de SALIDA y la
+//  entrada se despeja del P&L (g = (salida − entrada)·cant·mult + comisión). Hora de entrada: la nota de la sombra la trae;
+//  en la bitácora solo hay plazo en días: si es de varios días se toma la apertura (9:30), si es del mismo día se ESTIMA
+//  como 30 min antes del cierre (lo típico de la sombra intradía) y se cuenta aparte.
+//  La paper intradía copia a la sombra: su hora de entrada es la de la sombra del mismo día, acción y límite.
+var _entradasSombra = null;
+function horaDeLaSombra(o, limite){
+  if(!_entradasSombra){
+    _entradasSombra = {};
+    C.forEach(function(x){
+      var m;
+      if(x.cu === "Sombra" && x["in"] === "Acciones" && (m = /entró (\d\d:\d\d:\d\d) a ([\d.]+)/.exec(x.n || ""))){
+        var k = x.t + "|" + (x.v || x.f);
+        (_entradasSombra[k] = _entradasSombra[k] || []).push({h: m[1], p: parseFloat(m[2])});
+      }
+    });
+  }
+  var c = _entradasSombra[o.t + "|" + o.f] || [], mejor = null;
+  c.forEach(function(e){ if(!mejor || Math.abs(e.p - limite) < Math.abs(mejor.p - limite)) mejor = e; });
+  return mejor && Math.abs(mejor.p - limite) <= 0.05 ? new Date(o.f + "T" + mejor.h) : null;
+}
+function capitalDe(o){
+  if(o["in"] !== "Opciones" && o["in"] !== "Acciones") return null;
+  var mult = o["in"] === "Opciones" ? 100 : 1, q = Math.abs(o.q || 0);
+  if(!q) return null;
+  var fin = new Date(o.f + "T" + (o.h || "15:00") + ":00"), ini = null, est = false, ent, m;
+  if(o.cu === "Sombra"){
+    ent = o.p;
+    if((m = /entró (\d\d)-(\d\d) (\d\d:\d\d)/.exec(o.n || ""))) ini = new Date(o.f.slice(0,4) + "-" + m[1] + "-" + m[2] + "T" + m[3] + ":00");
+    else if((m = /entró (\d\d:\d\d:\d\d)/.exec(o.n || ""))) ini = new Date((o.v || o.f) + "T" + m[1]);
+  } else {
+    m = /llenó ([\d.]+)/.exec(o.n || "");
+    ent = m ? parseFloat(m[1]) : (o.p || 0) - (o.g - (o.cm || 0)) / (q * mult);
+    if(o.pl > 0){ ini = new Date(fin.getTime()); ini.setDate(ini.getDate() - o.pl); ini.setHours(9, 30, 0, 0); }
+    else if((m = /límite de la sombra ([\d.]+)/.exec(o.n || ""))) ini = horaDeLaSombra(o, parseFloat(m[1]));
+  }
+  if(!(ent > 0)) return null;
+  if(!ini || isNaN(ini) || ini > fin){ ini = new Date(fin.getTime() - 30 * 60000); est = true; }
+  return {k: ent * q * mult, ini: ini, fin: fin, est: est};
+}
+function capitalVis(v){
+  var ev = [], n = 0, suma = 0, est = 0, sin = 0, pnl = 0;
+  v.forEach(function(o){
+    var c = capitalDe(o);
+    if(!c){ sin++; return; }
+    n++; suma += c.k; pnl += o.g; if(c.est) est++;
+    ev.push([c.ini.getTime(), 1, c.k], [c.fin.getTime(), 0, c.k]);   // a la misma hora sale primero lo que cierra
+  });
+  ev.sort(function(a, b){ return a[0] - b[0] || a[1] - b[1]; });
+  var cur = 0, pico = 0, cuando = null;
+  ev.forEach(function(e){ cur += e[1] ? e[2] : -e[2]; if(cur > pico + 1e-9){ pico = cur; cuando = e[0]; } });
+  return {n: n, prom: n ? suma / n : 0, pico: pico, cuando: cuando, pnl: pnl, est: est, sin: sin};
+}
+function tarjetasCapital(v){
+  var c = capitalVis(v);
+  if(!c.n) return "";
+  var f = c.cuando ? new Date(c.cuando) : null;
+  var dia = f ? f.getDate() + " " + ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"][f.getMonth()] + " " + f.getFullYear() : "";
+  var r = c.pico ? c.pnl / c.pico * 100 : null;
+  var nota = [];
+  if(c.est) nota.push(c.est + " con hora de entrada estimada");
+  if(c.sin) nota.push(c.sin + " sin dato de capital");
+  return tar("Capital por operación", usd(c.prom), "lo que pusiste en cada una (promedio de " + c.n.toLocaleString("en-US") + ")", "") +
+         tar("Capital máximo a la vez", usd(c.pico), "lo que necesitas en la cuenta · " + dia, "") +
+         tar("Rendimiento sobre capital", r === null ? "—" : (r > 0 ? "+" : "") + r.toFixed(1) + "%",
+             "resultado " + usd(c.pnl) + " ÷ capital máximo" + (nota.length ? " · " + nota.join(" · ") : ""),
+             r === null ? "mut" : (r >= 0 ? "pos" : "neg"));
+}
+
 // ---------------------------------------------------------------- KPIs
 function kpis(){
   var v = vis();
@@ -1357,6 +1431,7 @@ function kpis(){
         //  se filtraba por instrumento, porque N ya venia con ese filtro.
         n === enCuenta ? "cerradas" : "de " + enCuenta.toLocaleString("en-US"), "") +
     tar("Resultado", usd(pnl), "neto de comisiones", pnl>=0?"pos":"neg") +
+    tarjetasCapital(v) +                                   // 19-nov-2026: capital y rendimiento sobre capital
     tar("Aciertos", n?pct(gan.length/n*100):"—", gan.length+" de "+n, "") +
     (function(){
       //  Va junto a Aciertos a proposito: los dos numeros solo significan
